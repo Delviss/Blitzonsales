@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --navy: #06101C;
+  --panel: #13243A;
+  --lime: #8BC53F;
+  --steel2: #A7B3C0;
+  --red: #D34A3A;
+  --amber: #E0A93B;
+  --green: #3F9D52;
+}
+
+body {
+  @apply bg-navy text-[#E7ECF2] font-sans;
+  -webkit-font-smoothing: antialiased;
+}
