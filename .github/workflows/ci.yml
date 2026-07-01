@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-api:
+    name: API Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install shared
+        working-directory: packages/shared
+        run: npm ci
+
+      - name: Build shared
+        working-directory: packages/shared
+        run: npm run build
+
+      - name: Install API
+        working-directory: apps/api
+        run: npm ci
+
+      - name: Run tests
+        working-directory: apps/api
+        run: npm test
+
+  build-web:
+    name: Web Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install shared
+        working-directory: packages/shared
+        run: npm ci
+
+      - name: Build shared
+        working-directory: packages/shared
+        run: npm run build
+
+      - name: Install Web
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Build Web
+        working-directory: apps/web
+        run: npm run build
+        env:
+          VITE_BASE_PATH: /blitzonsales/
+          VITE_API_URL: ''

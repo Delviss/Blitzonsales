@@ -11,7 +11,7 @@ export function getToken() { return token; }
 export function getUser() { return currentUser; }
 
 export async function login(email: string, password: string): Promise<void> {
-  const res = await fetch('/api/auth/login', {
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -20,13 +20,16 @@ export async function login(email: string, password: string): Promise<void> {
   const { accessToken } = await res.json();
   token = accessToken;
   const meRes = await apiFetch('/api/auth/me');
+
   currentUser = await meRes.json();
 }
 
 export function logout() { token = null; currentUser = null; }
 
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
+
 export function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  return fetch(url, {
+  return fetch(`${API_BASE}${url}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
