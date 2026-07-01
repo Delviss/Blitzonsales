@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth/auth.service';
 import { AppUser } from '../entities/app-user.entity';
 
@@ -16,16 +17,21 @@ describe('AuthService 2FA-gated login', () => {
   let service: AuthService;
   let sign: jest.Mock;
 
-  beforeEach(async () => {
+  async function buildService(requireTwofa: 'true' | 'false' = 'true') {
     sign = jest.fn().mockReturnValue('signed-token');
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: getRepositoryToken(AppUser), useValue: { findOne: jest.fn(), findOneOrFail: jest.fn(), save: jest.fn() } },
         { provide: JwtService, useValue: { sign } },
+        { provide: ConfigService, useValue: { get: () => (requireTwofa === 'false' ? 'false' : undefined) } },
       ],
     }).compile();
-    service = module.get(AuthService);
+    return module.get(AuthService);
+  }
+
+  beforeEach(async () => {
+    service = await buildService();
   });
 
   it('requires 2FA setup for an admin_gf without twofaEnabled', () => {
@@ -50,5 +56,12 @@ describe('AuthService 2FA-gated login', () => {
     expect(result.status).toBe('ok');
     expect((result as any).accessToken).toBe('signed-token');
     expect(sign).toHaveBeenCalledWith(expect.objectContaining({ sub: 'u1', rolle: 'aussendienst' }));
+  });
+
+  it('REQUIRE_2FA=false lets admin_gf/backoffice log in with just their hashed password', async () => {
+    const noTwofaService = await buildService('false');
+    const result = noTwofaService.login(makeUser({ rolle: 'admin_gf', twofaEnabled: false }));
+    expect(result.status).toBe('ok');
+    expect((result as any).accessToken).toBe('signed-token');
   });
 });

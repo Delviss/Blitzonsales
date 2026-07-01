@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { authenticator } from 'otplib';
 import { Rolle } from '@blitzon/shared';
@@ -20,7 +21,17 @@ export class AuthService {
     @InjectRepository(AppUser)
     private readonly users: Repository<AppUser>,
     private readonly jwt: JwtService,
+    private readonly config: ConfigService,
   ) {}
+
+  /**
+   * REQUIRE_2FA defaults to enabled (hardened Phase 5 behaviour); set to "false" in
+   * .env for a temporary plain hashed-password login (e.g. local/demo access before
+   * TOTP enrollment is rolled out). Flip back to true/unset before any real deployment.
+   */
+  private twofaRequired(): boolean {
+    return this.config.get<string>('REQUIRE_2FA') !== 'false';
+  }
 
   async validateUser(email: string, password: string): Promise<AppUser> {
     const user = await this.users.findOne({ where: { email } });
@@ -37,7 +48,7 @@ export class AuthService {
    * `purpose` claim, so a pending token cannot reach business endpoints.
    */
   login(user: AppUser): LoginResult {
-    if (TWOFA_REQUIRED_ROLES.includes(user.rolle)) {
+    if (this.twofaRequired() && TWOFA_REQUIRED_ROLES.includes(user.rolle)) {
       if (!user.twofaEnabled) {
         return { status: 'setup_required', tempToken: this.signTemp(user.id, 'setup') };
       }
