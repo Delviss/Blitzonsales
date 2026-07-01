@@ -32,6 +32,19 @@ export default function Layout() {
             <NavLink to="/verwaltung/produkte" className={({ isActive }) =>
               `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
             }>Produkte</NavLink>
+            {(user?.rolle === 'admin_gf' || user?.rolle === 'teamleiter' || user?.rolle === 'backoffice') && (
+              <NavLink to="/import" className={({ isActive }) =>
+                `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
+              }>Import</NavLink>
+            )}
+            <NavLink to="/provisionslaeufe" className={({ isActive }) =>
+              `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
+            }>Provisionsläufe</NavLink>
+            {user?.rolle === 'admin_gf' && (
+              <NavLink to="/verwaltung/provisionsregeln" className={({ isActive }) =>
+                `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
+              }>Provisionsregeln</NavLink>
+            )}
             {user?.rolle === 'admin_gf' && (
               <NavLink to="/verwaltung/benutzer" className={({ isActive }) =>
                 `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`

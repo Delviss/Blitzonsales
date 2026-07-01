@@ -48,4 +48,7 @@ export class CommissionLine {
 
   @Column({ type: 'text', nullable: true })
   begruendung: string | null;
+
+  @Column({ default: false })
+  datencheck: boolean;
 }
