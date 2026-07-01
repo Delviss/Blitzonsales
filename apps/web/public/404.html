@@ -5,7 +5,7 @@
   <script>
     // Redirect to the base URL, preserving the path in the hash so the SPA can restore it.
     // This handles hard-refreshes and direct URL access on GitHub Pages.
-    var base = '/blitzonsales/';
+    var base = '/Blitzonsales/';
     var path = window.location.pathname.replace(base, '') + window.location.search + window.location.hash;
     window.location.replace(base + '?p=' + encodeURIComponent(path));
   </script>
