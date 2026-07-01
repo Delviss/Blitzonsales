@@ -50,8 +50,18 @@ export default function ProvisionslaufDetailPage() {
     await load();
   });
 
-  const handleExport = (kind: 'datev' | 'intern') => withBusy(async () => {
-    await apiDownload(`/api/provisionslaeufe/${id}/export/${kind}`, `provisionslauf-${kind}.${kind === 'datev' ? 'csv' : 'xlsx'}`);
+  const handleExport = (kind: 'buchhaltung-csv' | 'buchhaltung-datev' | 'intern') => withBusy(async () => {
+    if (kind === 'buchhaltung-csv') {
+      await apiDownload(`/api/provisionslaeufe/${id}/export/buchhaltung?format=csv`, 'buchhaltung.csv');
+    } else if (kind === 'buchhaltung-datev') {
+      await apiDownload(`/api/provisionslaeufe/${id}/export/buchhaltung?format=datev`, 'buchhaltung-datev.csv');
+    } else {
+      await apiDownload(`/api/provisionslaeufe/${id}/export/intern`, 'provisionslauf.xlsx');
+    }
+  });
+
+  const handlePdf = (repId: string) => withBusy(async () => {
+    await apiDownload(`/api/provisionslaeufe/${id}/export/abrechnung/${repId}`, 'abrechnung.pdf');
   });
 
   if (!data || !run) return <div className="text-steel2">Lädt…</div>;
@@ -100,11 +110,16 @@ export default function ProvisionslaufDetailPage() {
             Freigeben
           </button>
         )}
-        {run.status === 'freigegeben' && isAdmin && (
+        {run.status === 'freigegeben' && (isAdmin || user?.rolle === 'backoffice') && (
           <>
-            <button disabled={busy} onClick={() => handleExport('datev')}
+            <button disabled={busy} onClick={() => handleExport('buchhaltung-csv')}
               className="bg-navy2 border border-line text-white font-semibold px-4 py-2 rounded-lg hover:border-lime transition-colors disabled:opacity-50">
-              DATEV-Export (CSV)
+              Buchhaltungsexport (CSV)
+            </button>
+            <button disabled={busy} onClick={() => handleExport('buchhaltung-datev')}
+              className="bg-navy2 border border-line text-white font-semibold px-4 py-2 rounded-lg hover:border-lime transition-colors disabled:opacity-50"
+              title="Platzhalter: echte DATEV-Spaltenspezifikation vom Steuerberater steht noch aus">
+              DATEV-Export (Platzhalter)
             </button>
             <button disabled={busy} onClick={() => handleExport('intern')}
               className="bg-navy2 border border-line text-white font-semibold px-4 py-2 rounded-lg hover:border-lime transition-colors disabled:opacity-50">
@@ -120,9 +135,15 @@ export default function ProvisionslaufDetailPage() {
           <h2 className="font-bold text-white mb-3">Summe je Verkäufer</h2>
           <div className="flex gap-6 flex-wrap">
             {data.summary.proRep.map(r => (
-              <div key={r.repId} className="text-sm">
+              <div key={r.repId} className="text-sm flex items-center gap-2">
                 <span className="text-steel2">{r.name}: </span>
                 <span className="font-mono text-lime2 font-bold">{formatEur(r.summe)}</span>
+                {run.status === 'freigegeben' && r.repId !== 'unbekannt' && (
+                  <button disabled={busy} onClick={() => handlePdf(r.repId)}
+                    className="text-[11px] text-steel hover:text-lime underline decoration-dotted">
+                    Abrechnung (PDF)
+                  </button>
+                )}
               </div>
             ))}
           </div>

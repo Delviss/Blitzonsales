@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { Organisation } from './organisation.entity';
+import { SalesRep } from './sales-rep.entity';
 
 @Entity('app_user')
 export class AppUser {
@@ -21,6 +22,13 @@ export class AppUser {
   @ManyToOne(() => Organisation, { nullable: true })
   @JoinColumn({ name: 'organisation_id' })
   organisation: Organisation | null;
+
+  @Column({ name: 'rep_id', nullable: true })
+  repId: string | null;
+
+  @ManyToOne(() => SalesRep, { nullable: true })
+  @JoinColumn({ name: 'rep_id' })
+  rep: SalesRep | null;
 
   @Column({ name: 'twofa_secret', nullable: true })
   twofaSecret: string | null;

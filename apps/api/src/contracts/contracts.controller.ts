@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, NotFoundException, Param, Query, Request, UseGuards } from '@nestjs/common';
 import { ContractsService } from './contracts.service';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
 
@@ -8,8 +8,14 @@ export class ContractsController {
   constructor(private readonly svc: ContractsService) {}
 
   @Get()
-  findAll(@Query('repId') repId?: string) { return this.svc.findAll(repId); }
+  findAll(@Query('repId') repId: string | undefined, @Request() req: any) {
+    return this.svc.findAll(req.user, repId);
+  }
 
   @Get(':id')
-  findOne(@Param('id') id: string) { return this.svc.findOne(id); }
+  async findOne(@Param('id') id: string, @Request() req: any) {
+    const contract = await this.svc.findOne(id, req.user);
+    if (!contract) throw new NotFoundException();
+    return contract;
+  }
 }
