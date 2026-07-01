@@ -97,6 +97,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://blitz:blitzdev@localhost:5432/blitzonsales
       JWT_SECRET: ci-test-secret
+      REQUIRE_2FA: 'true'
     steps:
       - uses: actions/checkout@v4
 
