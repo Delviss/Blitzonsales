@@ -60,9 +60,14 @@ async function seed() {
     )
   );
 
-  // Admin user
-  const adminPw = await bcrypt.hash('BlitzDev2026!', 12);
-  await userRepo.save(userRepo.create({ email: 'admin@blitzon.de', password: adminPw, rolle: 'admin_gf', organisationId: root.id }));
+  // Users: one per role, for RBAC testing
+  const pw = await bcrypt.hash('BlitzDev2026!', 12);
+  await userRepo.save([
+    userRepo.create({ email: 'admin@blitzon.de', password: pw, rolle: 'admin_gf', organisationId: root.id }),
+    userRepo.create({ email: 'teamleiter@blitzon.de', password: pw, rolle: 'teamleiter', organisationId: spear.id }),
+    userRepo.create({ email: 'backoffice@blitzon.de', password: pw, rolle: 'backoffice', organisationId: root.id }),
+    userRepo.create({ email: 'verkauf@blitzon.de', password: pw, rolle: 'aussendienst', organisationId: spear.id, repId: reps[0].id }),
+  ]);
 
   // Sample contracts
   const statuses = [

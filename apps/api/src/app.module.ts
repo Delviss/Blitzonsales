@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { OrganisationsModule } from './organisations/organisations.module';
 import { SalesRepsModule } from './sales-reps/sales-reps.module';
@@ -10,10 +12,13 @@ import { ContractsModule } from './contracts/contracts.module';
 import { AuditModule } from './audit/audit.module';
 import { CommissionsModule } from './commissions/commissions.module';
 import { ImportModule } from './import/import.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { DatenschutzModule } from './datenschutz/datenschutz.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
@@ -35,6 +40,9 @@ import { ImportModule } from './import/import.module';
     AuditModule,
     CommissionsModule,
     ImportModule,
+    DashboardModule,
+    DatenschutzModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

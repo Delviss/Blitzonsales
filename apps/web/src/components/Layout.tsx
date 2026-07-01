@@ -26,9 +26,11 @@ export default function Layout() {
             <NavLink to="/verwaltung/organisationen" className={({ isActive }) =>
               `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
             }>Organisationen</NavLink>
-            <NavLink to="/verwaltung/verkaeufer" className={({ isActive }) =>
-              `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
-            }>Verkäufer</NavLink>
+            {(user?.rolle === 'admin_gf' || user?.rolle === 'teamleiter' || user?.rolle === 'backoffice') && (
+              <NavLink to="/verwaltung/verkaeufer" className={({ isActive }) =>
+                `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
+              }>Verkäufer</NavLink>
+            )}
             <NavLink to="/verwaltung/produkte" className={({ isActive }) =>
               `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
             }>Produkte</NavLink>
@@ -37,9 +39,11 @@ export default function Layout() {
                 `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
               }>Import</NavLink>
             )}
-            <NavLink to="/provisionslaeufe" className={({ isActive }) =>
-              `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
-            }>Provisionsläufe</NavLink>
+            {(user?.rolle === 'admin_gf' || user?.rolle === 'teamleiter' || user?.rolle === 'backoffice') && (
+              <NavLink to="/provisionslaeufe" className={({ isActive }) =>
+                `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
+              }>Provisionsläufe</NavLink>
+            )}
             {user?.rolle === 'admin_gf' && (
               <NavLink to="/verwaltung/provisionsregeln" className={({ isActive }) =>
                 `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`

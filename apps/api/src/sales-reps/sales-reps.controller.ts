@@ -10,9 +10,11 @@ import { Rolle } from '@blitzon/shared';
 export class SalesRepsController {
   constructor(private readonly svc: SalesRepsService) {}
 
+  @Roles(Rolle.AdminGf, Rolle.Teamleiter, Rolle.Backoffice)
   @Get()
   findAll() { return this.svc.findAll(); }
 
+  @Roles(Rolle.AdminGf, Rolle.Teamleiter, Rolle.Backoffice)
   @Get(':id')
   findOne(@Param('id') id: string) { return this.svc.findOne(id); }
 

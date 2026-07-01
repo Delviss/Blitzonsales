@@ -29,4 +29,11 @@ export class CommissionRun {
 
   @Column({ name: 'freigegeben_am', type: 'timestamptz', nullable: true })
   freigegebenAm: Date | null;
+
+  @Column({ name: 'created_by', nullable: true })
+  createdBy: string | null;
+
+  @ManyToOne(() => AppUser, { nullable: true })
+  @JoinColumn({ name: 'created_by' })
+  createdByUser: AppUser | null;
 }

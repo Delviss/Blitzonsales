@@ -10,11 +10,13 @@ import { Rolle } from '@blitzon/shared';
 export class CommissionRulesController {
   constructor(private readonly svc: CommissionRulesService) {}
 
+  @Roles(Rolle.AdminGf, Rolle.Teamleiter, Rolle.Backoffice)
   @Get()
   findAll(@Query('organisationId') organisationId?: string) {
     return this.svc.findAll(organisationId);
   }
 
+  @Roles(Rolle.AdminGf, Rolle.Teamleiter, Rolle.Backoffice)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.svc.findOne(id);
