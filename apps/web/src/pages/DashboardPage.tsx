@@ -10,15 +10,21 @@ interface Contract {
   rep?: { name: string };
   produkt?: { name: string };
 }
+interface Run { id: string; status: string; }
 
 export default function DashboardPage() {
   const user = getUser();
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [runs, setRuns] = useState<Run[]>([]);
 
   useEffect(() => {
     apiFetch('/api/vertraege')
       .then(r => r.json())
       .then(setContracts)
+      .catch(() => {});
+    apiFetch('/api/provisionslaeufe')
+      .then(r => r.json())
+      .then(setRuns)
       .catch(() => {});
   }, []);
 
@@ -38,7 +44,7 @@ export default function DashboardPage() {
           { label: 'Verträge gesamt', val: contracts.length },
           { label: 'Verträge gültig', val: valid },
           { label: 'Widerruf / Storno', val: widerruf, warn: widerruf > 0 },
-          { label: 'Aktive Läufe', val: 0 },
+          { label: 'Aktive Läufe', val: runs.filter(r => r.status === 'entwurf').length },
         ].map(kpi => (
           <div key={kpi.label} className="bg-panel border border-line rounded-xl p-4">
             <div className="text-[11px] text-steel uppercase tracking-wide">{kpi.label}</div>

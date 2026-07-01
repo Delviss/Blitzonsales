@@ -21,4 +21,7 @@ export class ImportBatch {
 
   @CreateDateColumn({ name: 'zeitpunkt', type: 'timestamptz' })
   zeitpunkt: Date;
+
+  @Column({ type: 'jsonb', nullable: true })
+  fehler: Array<{ zeile: number; grund: string }> | null;
 }

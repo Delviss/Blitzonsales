@@ -39,6 +39,31 @@ export function apiFetch(url: string, options: RequestInit = {}): Promise<Respon
   });
 }
 
+export function apiUpload(url: string, formData: FormData): Promise<Response> {
+  return fetch(`${API_BASE}${url}`, {
+    method: 'POST',
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: formData,
+  });
+}
+
+export async function apiDownload(url: string, filenameFallback: string): Promise<void> {
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error('Download fehlgeschlagen.');
+  const blob = await res.blob();
+  const disposition = res.headers.get('Content-Disposition');
+  const match = disposition?.match(/filename="?([^"]+)"?/);
+  const filename = match?.[1] ?? filenameFallback;
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 export function formatEur(amount: number): string {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount);
 }

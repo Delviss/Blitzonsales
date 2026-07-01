@@ -6,6 +6,10 @@ import OrganisationenPage from './pages/verwaltung/OrganisationenPage';
 import VerkaeuferPage from './pages/verwaltung/VerkaeuferPage';
 import ProduktePage from './pages/verwaltung/ProduktePage';
 import BenutzerPage from './pages/verwaltung/BenutzerPage';
+import ProvisionsregelnPage from './pages/verwaltung/ProvisionsregelnPage';
+import ProvisionslaeufePage from './pages/ProvisionslaeufePage';
+import ProvisionslaufDetailPage from './pages/ProvisionslaufDetailPage';
+import ImportPage from './pages/ImportPage';
 import Layout from './components/Layout';
 import { getUser } from './lib/auth';
 
@@ -27,6 +31,10 @@ export default function App() {
         <Route path="verwaltung/verkaeufer" element={<VerkaeuferPage />} />
         <Route path="verwaltung/produkte" element={<ProduktePage />} />
         <Route path="verwaltung/benutzer" element={<BenutzerPage />} />
+        <Route path="verwaltung/provisionsregeln" element={<ProvisionsregelnPage />} />
+        <Route path="provisionslaeufe" element={<ProvisionslaeufePage />} />
+        <Route path="provisionslaeufe/:id" element={<ProvisionslaufDetailPage />} />
+        <Route path="import" element={<ImportPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
