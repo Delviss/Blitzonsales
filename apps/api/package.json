@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "scripts": {
     "start:dev": "nest start --watch",
-    "start": "node dist/main",
+    "start": "node dist/src/main",
     "build": "nest build",
     "migration:run": "ts-node -r tsconfig-paths/register src/migrations/run.ts",
     "seed": "ts-node -r tsconfig-paths/register src/seed/seed.ts",

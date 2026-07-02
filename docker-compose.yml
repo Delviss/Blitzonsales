@@ -1,4 +1,3 @@
-version: '3.9'
 services:
   postgres:
     image: postgres:16
@@ -10,6 +9,11 @@ services:
       - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U blitz -d blitzonsales']
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
   redis:
     image: redis:7
@@ -17,6 +21,36 @@ services:
       - '6379:6379'
     volumes:
       - redisdata:/data
+
+  # Full-stack local run: `docker compose up -d --build`, then open
+  # http://localhost:8080 and log in with a seeded user (see README).
+  # For API development on the host, start only the databases instead:
+  # `docker compose up -d postgres redis`.
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://blitz:blitzdev@postgres:5432/blitzonsales
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: local-docker-only-secret
+      JWT_EXPIRES_IN: 8h
+      REQUIRE_2FA: 'false'
+      PORT: '3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - '8080:80'
+    depends_on:
+      - api
 
 volumes:
   pgdata:
