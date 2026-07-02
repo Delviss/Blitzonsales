@@ -78,6 +78,38 @@ jobs:
           VITE_BASE_PATH: /Blitzonsales/
           VITE_API_URL: ''
 
+  # Verifies the documented "one command" local setup: builds the compose
+  # stack from scratch and logs in through the nginx proxy, exactly like a
+  # user following the README on their own machine.
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start full stack
+        run: docker compose up -d --build
+
+      - name: Wait for login through the web proxy
+        run: |
+          for i in $(seq 1 60); do
+            body=$(curl -s -X POST http://localhost:8080/api/auth/login \
+              -H 'Content-Type: application/json' \
+              -d '{"email":"admin@blitzon.de","password":"BlitzDev2026!"}') || true
+            if echo "$body" | grep -q accessToken; then
+              echo "Login OK"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Login never succeeded. Last response: $body"
+          exit 1
+
+      - name: Web app is served
+        run: curl -sf http://localhost:8080/ | grep -qi '<div id="root">'
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs
+
   migrate-and-e2e:
     runs-on: ubuntu-latest
     services:
