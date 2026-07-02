@@ -1,70 +1,99 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { getUser, logout } from '../lib/auth';
+import { LogOutIcon } from './icons';
+import logoWordmark from '../assets/brand/logo-wordmark-white.png';
+
+const rollenLabels: Record<string, string> = {
+  admin_gf: 'Admin / GF',
+  teamleiter: 'Teamleiter',
+  backoffice: 'Backoffice',
+  aussendienst: 'Außendienst',
+};
+
+interface NavItem {
+  to: string;
+  label: string;
+  roles?: string[];
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { to: '/dashboard', label: 'Dashboard' },
+  { to: '/verwaltung/organisationen', label: 'Organisationen' },
+  { to: '/verwaltung/verkaeufer', label: 'Verkäufer', roles: ['admin_gf', 'teamleiter', 'backoffice'] },
+  { to: '/verwaltung/produkte', label: 'Produkte' },
+  { to: '/import', label: 'Import', roles: ['admin_gf', 'teamleiter', 'backoffice'] },
+  { to: '/provisionslaeufe', label: 'Provisionsläufe', roles: ['admin_gf', 'teamleiter', 'backoffice'] },
+  { to: '/verwaltung/provisionsregeln', label: 'Provisionsregeln', roles: ['admin_gf'] },
+  { to: '/verwaltung/benutzer', label: 'Benutzer', roles: ['admin_gf'] },
+];
 
 export default function Layout() {
   const user = getUser();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = () => { logout(); navigate('/login'); };
+  const items = NAV_ITEMS.filter(i => !i.roles || (user && i.roles.includes(user.rolle)));
 
   return (
-    <div className="min-h-screen bg-navy">
-      <header className="sticky top-0 z-50 border-b border-line bg-navy/90 backdrop-blur-md">
-        <div className="mx-auto max-w-[1180px] px-7 flex items-center h-[62px] gap-4">
-          <div className="flex items-center gap-2.5 font-extrabold tracking-wide">
-            <span className="spark" style={{
-              width: 14, height: 14, background: '#8BC53F', display: 'inline-block',
-              clipPath: 'polygon(45% 0,100% 0,55% 45%,100% 45%,0 100%,40% 55%,0 55%)'
-            }} />
-            BlitzON<small className="font-medium text-steel text-[11px] tracking-[2px] ml-1">CONTROL</small>
-          </div>
+    <div className="min-h-screen">
+      <div className="ambient" />
 
-          <nav className="ml-auto flex gap-1 flex-wrap">
-            <NavLink to="/dashboard" className={({ isActive }) =>
-              `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
-            }>Dashboard</NavLink>
-            <NavLink to="/verwaltung/organisationen" className={({ isActive }) =>
-              `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
-            }>Organisationen</NavLink>
-            {(user?.rolle === 'admin_gf' || user?.rolle === 'teamleiter' || user?.rolle === 'backoffice') && (
-              <NavLink to="/verwaltung/verkaeufer" className={({ isActive }) =>
-                `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
-              }>Verkäufer</NavLink>
-            )}
-            <NavLink to="/verwaltung/produkte" className={({ isActive }) =>
-              `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
-            }>Produkte</NavLink>
-            {(user?.rolle === 'admin_gf' || user?.rolle === 'teamleiter' || user?.rolle === 'backoffice') && (
-              <NavLink to="/import" className={({ isActive }) =>
-                `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
-              }>Import</NavLink>
-            )}
-            {(user?.rolle === 'admin_gf' || user?.rolle === 'teamleiter' || user?.rolle === 'backoffice') && (
-              <NavLink to="/provisionslaeufe" className={({ isActive }) =>
-                `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
-              }>Provisionsläufe</NavLink>
-            )}
-            {user?.rolle === 'admin_gf' && (
-              <NavLink to="/verwaltung/provisionsregeln" className={({ isActive }) =>
-                `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
-              }>Provisionsregeln</NavLink>
-            )}
-            {user?.rolle === 'admin_gf' && (
-              <NavLink to="/verwaltung/benutzer" className={({ isActive }) =>
-                `text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ${isActive ? 'text-white border-lime' : 'text-steel2 border-transparent hover:text-white hover:border-line'}`
-              }>Benutzer</NavLink>
-            )}
+      <header className="sticky top-0 z-50 border-b border-line/80 bg-night/75 backdrop-blur-xl">
+        <div className="mx-auto max-w-[1280px] px-6 flex items-center h-[68px] gap-6">
+          <NavLink to="/dashboard" className="shrink-0 group" aria-label="BlitzON Consulting – Dashboard">
+            <img
+              src={logoWordmark}
+              alt="BlitzON Consulting"
+              className="h-[46px] w-auto transition-all duration-300 group-hover:drop-shadow-[0_0_14px_rgba(8,184,231,0.55)]"
+            />
+          </NavLink>
+
+          <nav className="ml-auto flex gap-1 flex-wrap items-center">
+            {items.map(item => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  `relative text-[13px] font-medium px-3.5 py-2 rounded-xl transition-all duration-200 ${
+                    isActive
+                      ? 'text-white bg-brand/10 shadow-[inset_0_0_0_1px_rgba(8,184,231,0.35)]'
+                      : 'text-steel2 hover:text-white hover:bg-white/[0.04]'
+                  }`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
           </nav>
 
-          <div className="flex items-center gap-3 ml-4">
-            <span className="text-[12px] text-steel2">{user?.email}</span>
-            <button onClick={handleLogout} className="text-[12px] text-steel hover:text-white transition-colors">Abmelden</button>
+          <div className="flex items-center gap-3 pl-4 border-l border-line/80">
+            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-soft to-brand-deep flex items-center justify-center text-night text-xs font-black uppercase select-none">
+              {user?.email?.[0] ?? '?'}
+            </div>
+            <div className="hidden lg:block leading-tight">
+              <div className="text-[12px] font-semibold text-ink max-w-[180px] truncate">{user?.email}</div>
+              <div className="text-[10.5px] text-steel">{rollenLabels[user?.rolle ?? ''] ?? user?.rolle}</div>
+            </div>
+            <button
+              onClick={handleLogout}
+              title="Abmelden"
+              className="h-9 w-9 rounded-xl border border-line text-steel2 flex items-center justify-center transition-all duration-200 hover:text-red hover:border-red/40 hover:bg-red/5"
+            >
+              <LogOutIcon size={15} />
+            </button>
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-[1180px] px-7 py-10">
+
+      <main key={location.pathname} className="mx-auto max-w-[1280px] px-6 py-10 animate-fade-in">
         <Outlet />
       </main>
+
+      <footer className="mx-auto max-w-[1280px] px-6 pb-8 pt-2 flex items-center justify-between text-[11px] text-steel">
+        <span>© {new Date().getFullYear()} BlitzON Consulting</span>
+        <span className="tracking-[2px] uppercase">Energy. Sales. Performance.</span>
+      </footer>
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../lib/auth';
 import DataTable from '../../components/DataTable';
+import PageHeader from '../../components/PageHeader';
+import { ShieldIcon } from '../../components/icons';
 
 interface Benutzer { id: string; email: string; rolle: string; twofaEnabled: boolean; }
 
@@ -17,14 +19,33 @@ export default function BenutzerPage() {
 
   return (
     <div>
-      <div className="text-[12px] tracking-[2.5px] text-lime font-bold uppercase mb-1">Verwaltung</div>
-      <h1 className="text-2xl font-extrabold mb-6">Benutzer</h1>
+      <PageHeader
+        kicker="Verwaltung"
+        title="Benutzer"
+        subtitle="Zugänge, Rollen und Zwei-Faktor-Status der Plattform."
+      />
       <DataTable<Benutzer>
+        title="Alle Benutzer"
         rows={benutzer}
         columns={[
-          { key: 'email', header: 'E-Mail', render: r => <span className="text-white font-semibold">{r.email}</span> },
+          {
+            key: 'email', header: 'E-Mail',
+            render: r => (
+              <span className="flex items-center gap-2.5">
+                <span className="h-7 w-7 rounded-full bg-gradient-to-br from-brand-soft to-brand-deep flex items-center justify-center text-night text-[11px] font-black uppercase">
+                  {r.email[0]}
+                </span>
+                <span className="text-ink font-semibold">{r.email}</span>
+              </span>
+            ),
+          },
           { key: 'rolle', header: 'Rolle', render: r => rollenLabels[r.rolle] ?? r.rolle },
-          { key: 'twofaEnabled', header: '2FA', render: r => <span className={r.twofaEnabled ? 'text-green font-bold' : 'text-steel'}>{r.twofaEnabled ? 'Aktiv' : '—'}</span> },
+          {
+            key: 'twofaEnabled', header: '2FA',
+            render: r => r.twofaEnabled
+              ? <span className="chip bg-green/10 text-green border-green/30"><ShieldIcon size={11} />Aktiv</span>
+              : <span className="text-steel">—</span>,
+          },
         ]}
       />
     </div>

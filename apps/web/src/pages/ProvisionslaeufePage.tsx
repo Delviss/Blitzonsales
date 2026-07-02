@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch, getUser } from '../lib/auth';
 import DataTable from '../components/DataTable';
+import PageHeader from '../components/PageHeader';
+import { RunStatusPill } from '../components/StatusPill';
+import { PlusIcon } from '../components/icons';
 
 interface Run {
   id: string;
@@ -45,47 +48,52 @@ export default function ProvisionslaeufePage() {
 
   return (
     <div>
-      <div className="text-[12px] tracking-[2.5px] text-lime font-bold uppercase mb-1">Provisionierung</div>
-      <h1 className="text-2xl font-extrabold mb-6">Provisionsläufe</h1>
-
-      <DataTable<Run>
-        rows={runs}
-        columns={[
-          {
-            key: 'periode', header: 'Periode', render: r => (
-              <Link to={`/provisionslaeufe/${r.id}`} className="font-semibold text-lime2 hover:underline">{r.periode}</Link>
-            ),
-          },
-          { key: 'organisation', header: 'Organisation', render: r => r.organisation?.name ?? 'alle' },
-          {
-            key: 'status', header: 'Status', render: r => (
-              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                r.status === 'freigegeben' ? 'bg-green/10 text-green border-green/30' : 'bg-amber/10 text-amber border-amber/30'
-              }`}>{r.status === 'freigegeben' ? 'Freigegeben' : 'Entwurf'}</span>
-            ),
-          },
-        ]}
+      <PageHeader
+        kicker="Provisionierung"
+        title="Provisionsläufe"
+        subtitle="Monatliche Abrechnungsläufe anlegen, berechnen und freigeben."
       />
 
       {canCreate && (
-        <form onSubmit={handleCreate} className="mt-6 bg-panel border border-line rounded-xl p-5 flex gap-3 items-end flex-wrap">
+        <form onSubmit={handleCreate} className="card p-5 mb-6 flex gap-4 items-end flex-wrap animate-fade-up">
           <div>
-            <label className="block text-[11px] font-semibold text-steel uppercase tracking-wide mb-1">Periode (JJJJ-MM)</label>
-            <input value={periode} onChange={e => setPeriode(e.target.value)} type="month" required
-              className="bg-navy border border-line rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-lime" />
+            <label className="label">Periode (JJJJ-MM)</label>
+            <input value={periode} onChange={e => setPeriode(e.target.value)} type="month" required className="input w-44" />
           </div>
           <div>
-            <label className="block text-[11px] font-semibold text-steel uppercase tracking-wide mb-1">Organisation</label>
-            <select value={organisationId} onChange={e => setOrganisationId(e.target.value)}
-              className="bg-navy border border-line rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-lime">
+            <label className="label">Organisation</label>
+            <select value={organisationId} onChange={e => setOrganisationId(e.target.value)} className="input w-56">
               <option value="">Alle Organisationen</option>
               {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           </div>
-          <button type="submit" className="bg-lime text-navy font-bold px-4 py-2 rounded-lg hover:bg-lime2 transition-colors">Lauf anlegen</button>
-          {error && <span className="text-red text-sm">{error}</span>}
+          <button type="submit" className="btn-primary">
+            <PlusIcon size={15} />
+            Lauf anlegen
+          </button>
+          {error && <span className="text-red text-sm animate-fade-in">{error}</span>}
         </form>
       )}
+
+      <DataTable<Run>
+        title="Alle Läufe"
+        rows={runs}
+        emptyText="Noch keine Provisionsläufe angelegt."
+        columns={[
+          {
+            key: 'periode', header: 'Periode', render: r => (
+              <Link
+                to={`/provisionslaeufe/${r.id}`}
+                className="font-semibold text-brand-soft hover:text-white transition-colors underline-offset-4 hover:underline"
+              >
+                {r.periode}
+              </Link>
+            ),
+          },
+          { key: 'organisation', header: 'Organisation', render: r => r.organisation?.name ?? 'Alle' },
+          { key: 'status', header: 'Status', render: r => <RunStatusPill status={r.status} /> },
+        ]}
+      />
     </div>
   );
 }

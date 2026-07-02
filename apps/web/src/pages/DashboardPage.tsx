@@ -4,6 +4,10 @@ import {
 } from 'recharts';
 import { apiFetch, getUser, formatEur } from '../lib/auth';
 import StatusPill from '../components/StatusPill';
+import StatCard from '../components/StatCard';
+import PageHeader from '../components/PageHeader';
+import DataTable from '../components/DataTable';
+import { EuroIcon, FileCheckIcon, AlertIcon, UsersIcon } from '../components/icons';
 
 interface Contract {
   id: string;
@@ -36,12 +40,39 @@ interface DashboardData {
   myLines?: MyLine[];
 }
 
-const CHART_COLORS = ['#8BC53F', '#A8DC57', '#E0A93B', '#D34A3A', '#7E8B9B', '#3F9D52'];
+/* Chart theme — brand cyan for single-series marks; the categorical set below is
+   CVD-validated against the panel surface (dataviz palette check). */
+const SERIES = '#22C0EE';
+const CATEGORICAL = ['#1794C6', '#C98500', '#9085E9', '#E66767'];
+const RISK = '#E66767';
+const GRID = '#1B2C42';
+const TICK = { fill: '#647A90', fontSize: 10.5 };
+const TOOLTIP_STYLE = {
+  background: '#0D1B2C',
+  border: '1px solid #1B2C42',
+  borderRadius: 12,
+  boxShadow: '0 12px 32px -12px rgba(0,0,0,0.8)',
+  fontSize: 12,
+};
+const CURSOR = { fill: 'rgba(255,255,255,0.04)' };
+
+/* Labels wear text ink, not the slice color (dataviz: text wears text tokens). */
+const RADIAN = Math.PI / 180;
+function renderPieLabel({ cx, cy, midAngle, outerRadius, name, value }: any) {
+  const r = outerRadius + 16;
+  const x = cx + r * Math.cos(-midAngle * RADIAN);
+  const y = cy + r * Math.sin(-midAngle * RADIAN);
+  return (
+    <text x={x} y={y} fill="#A9BDCE" fontSize={12} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central">
+      {`${name}: ${value}`}
+    </text>
+  );
+}
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-panel border border-line rounded-xl p-4">
-      <h2 className="font-bold text-white mb-3 text-sm">{title}</h2>
+    <div className="card card-hover p-5 animate-fade-up">
+      <h2 className="font-bold text-white mb-4 text-sm">{title}</h2>
       <div style={{ width: '100%', height: 240 }}>
         <ResponsiveContainer>{children as any}</ResponsiveContainer>
       </div>
@@ -64,89 +95,134 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="text-[12px] tracking-[2.5px] text-lime font-bold uppercase mb-1">Dashboard</div>
-      <h1 className="text-3xl font-extrabold mb-1">{isRep ? 'Meine Übersicht' : 'Übersicht'}</h1>
-      <p className="text-steel2 mb-8">
-        Willkommen, {user?.email}
-        {isRep && ' (hier siehst du nur deine eigenen Daten)'}
-      </p>
+      <PageHeader
+        kicker="Dashboard"
+        title={isRep ? 'Meine Übersicht' : 'Übersicht'}
+        subtitle={
+          <>
+            Willkommen, <span className="text-ink font-semibold">{user?.email}</span>
+            {isRep && ' – hier siehst du ausschließlich deine eigenen Daten.'}
+          </>
+        }
+      />
 
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        {[
-          { label: isRep ? 'Meine Provision (freigegeben)' : 'Nettoprovision (freigegeben)', val: kpis ? formatEur(kpis.netCommission) : '—' },
-          { label: 'Verträge gültig', val: kpis?.validContracts ?? '—' },
-          { label: 'Widerruf / Storno', val: kpis?.widerrufStornoCount ?? '—', warn: (kpis?.widerrufStornoCount ?? 0) > 0 },
-          { label: isRep ? 'Aktiv' : 'Aktive Verkäufer', val: kpis?.activeReps ?? '—' },
-        ].map(kpi => (
-          <div key={kpi.label} className="bg-panel border border-line rounded-xl p-4">
-            <div className="text-[11px] text-steel uppercase tracking-wide">{kpi.label}</div>
-            <div className={`text-2xl font-extrabold mt-1 ${kpi.warn ? 'text-red' : 'text-lime2'}`}>{kpi.val}</div>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+        <StatCard
+          label={isRep ? 'Meine Provision (freigegeben)' : 'Nettoprovision (freigegeben)'}
+          value={kpis ? formatEur(kpis.netCommission) : undefined}
+          icon={<EuroIcon size={17} />}
+          tone="brand"
+        />
+        <StatCard
+          label="Gültige Verträge"
+          value={kpis?.validContracts}
+          icon={<FileCheckIcon size={17} />}
+          tone="neutral"
+        />
+        <StatCard
+          label="Widerruf / Storno"
+          value={kpis?.widerrufStornoCount}
+          icon={<AlertIcon size={17} />}
+          tone={(kpis?.widerrufStornoCount ?? 0) > 0 ? 'danger' : 'neutral'}
+        />
+        <StatCard
+          label={isRep ? 'Aktiv' : 'Aktive Verkäufer'}
+          value={kpis?.activeReps}
+          icon={<UsersIcon size={17} />}
+          tone="neutral"
+        />
       </div>
 
       {dashboard && (
-        <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
           <ChartCard title="Statusverteilung">
             <BarChart data={dashboard.statusDistribution}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1C2C42" />
-              <XAxis dataKey="status" tick={{ fill: '#A7B3C0', fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={70} />
-              <YAxis tick={{ fill: '#A7B3C0', fontSize: 11 }} allowDecimals={false} />
-              <Tooltip contentStyle={{ background: '#0E1B2E', border: '1px solid #1C2C42' }} />
-              <Bar dataKey="count" fill="#8BC53F" radius={[4, 4, 0, 0]} />
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="status" tick={TICK} interval={0} angle={-20} textAnchor="end" height={70} axisLine={{ stroke: GRID }} tickLine={false} />
+              <YAxis tick={TICK} allowDecimals={false} axisLine={false} tickLine={false} width={36} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} cursor={CURSOR} />
+              <Bar dataKey="count" name="Verträge" fill={SERIES} radius={[4, 4, 0, 0]} maxBarSize={30} />
             </BarChart>
           </ChartCard>
 
           <ChartCard title="Energieverteilung">
             <PieChart>
-              <Pie data={dashboard.energieSplit} dataKey="count" nameKey="energie" cx="50%" cy="50%" outerRadius={80} label>
-                {dashboard.energieSplit.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+              <Pie
+                data={dashboard.energieSplit}
+                dataKey="count"
+                nameKey="energie"
+                cx="50%"
+                cy="50%"
+                innerRadius={52}
+                outerRadius={82}
+                paddingAngle={3}
+                stroke="#0B1522"
+                strokeWidth={2}
+                label={renderPieLabel}
+                labelLine={{ stroke: '#647A90' }}
+              >
+                {dashboard.energieSplit.map((_, i) => (
+                  <Cell key={i} fill={CATEGORICAL[i % CATEGORICAL.length]} />
+                ))}
               </Pie>
-              <Legend wrapperStyle={{ fontSize: 11, color: '#A7B3C0' }} />
-              <Tooltip contentStyle={{ background: '#0E1B2E', border: '1px solid #1C2C42' }} />
+              <Legend
+                wrapperStyle={{ fontSize: 11.5 }}
+                iconType="circle"
+                iconSize={8}
+                formatter={(value: string) => <span style={{ color: '#A9BDCE' }}>{value}</span>}
+              />
+              <Tooltip contentStyle={TOOLTIP_STYLE} />
             </PieChart>
           </ChartCard>
 
           {!isRep && (
             <ChartCard title="Provision je Organisation">
               <BarChart data={dashboard.byOrganisation}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1C2C42" />
-                <XAxis dataKey="name" tick={{ fill: '#A7B3C0', fontSize: 10 }} />
-                <YAxis tick={{ fill: '#A7B3C0', fontSize: 11 }} />
-                <Tooltip contentStyle={{ background: '#0E1B2E', border: '1px solid #1C2C42' }} formatter={(v: number) => formatEur(v)} />
-                <Bar dataKey="commission" fill="#A8DC57" radius={[4, 4, 0, 0]} />
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="name" tick={TICK} axisLine={{ stroke: GRID }} tickLine={false} />
+                <YAxis tick={TICK} axisLine={false} tickLine={false} width={54} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} cursor={CURSOR} formatter={(v: number) => formatEur(v)} />
+                <Bar dataKey="commission" name="Provision" fill={SERIES} radius={[4, 4, 0, 0]} maxBarSize={30} />
               </BarChart>
             </ChartCard>
           )}
 
           <ChartCard title="Provision je Produkt">
             <BarChart data={dashboard.byProdukt}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1C2C42" />
-              <XAxis dataKey="name" tick={{ fill: '#A7B3C0', fontSize: 9 }} interval={0} angle={-20} textAnchor="end" height={70} />
-              <YAxis tick={{ fill: '#A7B3C0', fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: '#0E1B2E', border: '1px solid #1C2C42' }} formatter={(v: number) => formatEur(v)} />
-              <Bar dataKey="commission" fill="#E0A93B" radius={[4, 4, 0, 0]} />
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="name" tick={{ ...TICK, fontSize: 9.5 }} interval={0} angle={-20} textAnchor="end" height={70} axisLine={{ stroke: GRID }} tickLine={false} />
+              <YAxis tick={TICK} axisLine={false} tickLine={false} width={54} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} cursor={CURSOR} formatter={(v: number) => formatEur(v)} />
+              <Bar dataKey="commission" name="Provision" fill={SERIES} radius={[4, 4, 0, 0]} maxBarSize={30} />
             </BarChart>
           </ChartCard>
 
           <ChartCard title="Stornoquote über Zeit">
             <LineChart data={dashboard.cancellationRateByPeriod}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1C2C42" />
-              <XAxis dataKey="periode" tick={{ fill: '#A7B3C0', fontSize: 10 }} />
-              <YAxis tick={{ fill: '#A7B3C0', fontSize: 11 }} unit="%" />
-              <Tooltip contentStyle={{ background: '#0E1B2E', border: '1px solid #1C2C42' }} formatter={(v: number) => `${v}%`} />
-              <Line type="monotone" dataKey="rate" stroke="#D34A3A" strokeWidth={2} dot={{ r: 3 }} />
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="periode" tick={TICK} axisLine={{ stroke: GRID }} tickLine={false} />
+              <YAxis tick={TICK} unit="%" axisLine={false} tickLine={false} width={44} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => `${v}%`} />
+              <Line
+                type="monotone"
+                dataKey="rate"
+                name="Stornoquote"
+                stroke={RISK}
+                strokeWidth={2}
+                dot={{ r: 3, fill: '#0B1522', stroke: RISK, strokeWidth: 2 }}
+                activeDot={{ r: 5 }}
+              />
             </LineChart>
           </ChartCard>
 
           {!isRep && (
             <ChartCard title="Auszahlung je Verkäufer">
               <BarChart data={dashboard.payoutsByRep}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1C2C42" />
-                <XAxis dataKey="name" tick={{ fill: '#A7B3C0', fontSize: 9 }} interval={0} angle={-20} textAnchor="end" height={70} />
-                <YAxis tick={{ fill: '#A7B3C0', fontSize: 11 }} />
-                <Tooltip contentStyle={{ background: '#0E1B2E', border: '1px solid #1C2C42' }} formatter={(v: number) => formatEur(v)} />
-                <Bar dataKey="betrag" fill="#8BC53F" radius={[4, 4, 0, 0]} />
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="name" tick={{ ...TICK, fontSize: 9.5 }} interval={0} angle={-20} textAnchor="end" height={70} axisLine={{ stroke: GRID }} tickLine={false} />
+                <YAxis tick={TICK} axisLine={false} tickLine={false} width={54} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} cursor={CURSOR} formatter={(v: number) => formatEur(v)} />
+                <Bar dataKey="betrag" name="Auszahlung" fill={SERIES} radius={[4, 4, 0, 0]} maxBarSize={30} />
               </BarChart>
             </ChartCard>
           )}
@@ -154,62 +230,37 @@ export default function DashboardPage() {
       )}
 
       {isRep && dashboard?.myLines && dashboard.myLines.length > 0 && (
-        <div className="mb-8 bg-panel border border-line rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-line">
-            <h2 className="font-bold text-white">Meine Provisionszeilen</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12.5px] border-collapse">
-              <thead>
-                <tr>
-                  {['Vertrag', 'Periode', 'Lauf-Status', 'Betrag', 'Begründung'].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 bg-navy2 text-steel2 font-semibold text-[11px] uppercase tracking-wide border-b border-line">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {dashboard.myLines.map((l, i) => (
-                  <tr key={i} className={i % 2 === 0 ? 'bg-panel' : 'bg-navy2/40'}>
-                    <td className="px-4 py-2.5 font-mono text-lime2 border-b border-line/30">{l.joulesId ?? '—'}</td>
-                    <td className="px-4 py-2.5 border-b border-line/30 text-white">{l.periode}</td>
-                    <td className="px-4 py-2.5 border-b border-line/30 text-steel2">{l.runStatus === 'freigegeben' ? 'Freigegeben' : 'Entwurf'}</td>
-                    <td className={`px-4 py-2.5 border-b border-line/30 font-mono font-bold ${l.betrag < 0 ? 'text-red' : 'text-lime2'}`}>{formatEur(l.betrag)}</td>
-                    <td className="px-4 py-2.5 border-b border-line/30 text-steel2">{l.begruendung ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="mb-8">
+          <DataTable<MyLine>
+            title="Meine Provisionszeilen"
+            rows={dashboard.myLines}
+            columns={[
+              { key: 'joulesId', header: 'Vertrag', render: l => <span className="font-mono text-brand-soft">{l.joulesId ?? '—'}</span> },
+              { key: 'periode', header: 'Periode', render: l => <span className="text-ink">{l.periode}</span> },
+              { key: 'runStatus', header: 'Lauf-Status', render: l => (l.runStatus === 'freigegeben' ? 'Freigegeben' : 'Entwurf') },
+              {
+                key: 'betrag', header: 'Betrag', align: 'right',
+                render: l => (
+                  <span className={`font-mono font-bold ${l.betrag < 0 ? 'text-red' : 'text-brand-soft'}`}>{formatEur(l.betrag)}</span>
+                ),
+              },
+              { key: 'begruendung', header: 'Begründung', render: l => l.begruendung ?? '—' },
+            ]}
+          />
         </div>
       )}
 
-      <div className="bg-panel border border-line rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-line">
-          <h2 className="font-bold text-white">{isRep ? 'Meine Verträge' : 'Letzte Verträge'}</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[12.5px] border-collapse">
-            <thead>
-              <tr>
-                {['Joules ID', 'Verkäufer', 'Produkt', 'Status', 'Kunde'].map(h => (
-                  <th key={h} className="text-left px-4 py-2.5 bg-navy2 text-steel2 font-semibold text-[11px] uppercase tracking-wide border-b border-line">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {contracts.slice(0, 20).map((c, i) => (
-                <tr key={c.id} className={i % 2 === 0 ? 'bg-panel' : 'bg-navy2/40'}>
-                  <td className="px-4 py-2.5 font-mono text-lime2 border-b border-line/30">{c.joulesId}</td>
-                  <td className="px-4 py-2.5 border-b border-line/30 text-white">{c.rep?.name ?? '—'}</td>
-                  <td className="px-4 py-2.5 border-b border-line/30 text-steel2">{c.produkt?.name ?? '—'}</td>
-                  <td className="px-4 py-2.5 border-b border-line/30"><StatusPill status={c.status} /></td>
-                  <td className="px-4 py-2.5 border-b border-line/30 text-steel2">{c.kunde ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable<Contract>
+        title={isRep ? 'Meine Verträge' : 'Letzte Verträge'}
+        rows={contracts.slice(0, 20)}
+        columns={[
+          { key: 'joulesId', header: 'Joules ID', render: c => <span className="font-mono text-brand-soft">{c.joulesId}</span> },
+          { key: 'rep', header: 'Verkäufer', render: c => <span className="text-ink font-medium">{c.rep?.name ?? '—'}</span> },
+          { key: 'produkt', header: 'Produkt', render: c => c.produkt?.name ?? '—' },
+          { key: 'status', header: 'Status', render: c => <StatusPill status={c.status} /> },
+          { key: 'kunde', header: 'Kunde', render: c => c.kunde ?? '—' },
+        ]}
+      />
     </div>
   );
 }
