@@ -1,12 +1,42 @@
 # Blitzonsales
 A web platform that replaces two manual processes at BlitzON:  1. A monthly commission list maintained by hand in Google Sheets (the +50 / -50 list). 2. Manual filtering inside the Joules portal to decide which contracts count toward commission.
 
-## Getting started (local development)
+## Hosting status
 
-The `main` branch auto-deploys the **frontend only** to GitHub Pages
-(`.github/workflows/deploy-pages.yml`). That deployment has no backend behind
-it, so login always fails there — to actually log in and use the platform,
-run the full stack locally:
+There is **no cloud backend** (Railway or otherwise) connected to this
+project — hosting has not been provisioned yet (see `PROGRESS.md`, open
+question 9). The `main` branch auto-deploys the **frontend only** to GitHub
+Pages (`.github/workflows/deploy-pages.yml`). That deployment has no backend
+behind it, so login always fails there. To log in and use the platform, run
+it locally with Docker (below).
+
+## Getting started — one command (Docker)
+
+With [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+installed and running, clone this repository and run from its root folder:
+
+```bash
+docker compose up -d --build
+```
+
+The first build takes a few minutes. It starts Postgres, Redis, the API and
+the web app; migrations and the demo seed (bcrypt-hashed logins) run
+automatically. Then open **http://localhost:8080** and log in with:
+
+| Rolle        | E-Mail                   | Passwort        |
+| ------------ | ------------------------ | --------------- |
+| Admin / GF   | `admin@blitzon.de`       | `BlitzDev2026!` |
+| Teamleiter   | `teamleiter@blitzon.de`  | `BlitzDev2026!` |
+| Backoffice   | `backoffice@blitzon.de`  | `BlitzDev2026!` |
+| Außendienst  | `verkauf@blitzon.de`     | `BlitzDev2026!` |
+
+Stop everything with `docker compose down` (add `-v` to also wipe the
+database). These credentials are for local demo use only.
+
+## Local development (without the app containers)
+
+Start only the databases (`docker compose up -d postgres redis`) and run the
+API/web on your machine:
 
 ```bash
 # 1. Postgres + Redis

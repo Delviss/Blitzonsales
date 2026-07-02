@@ -25,6 +25,15 @@ const ds = new DataSource({
 async function seed() {
   await ds.initialize();
 
+  // Idempotency guard: the Docker entrypoint runs this on every container
+  // start, but the demo data must only be inserted once.
+  const existingUsers = await ds.getRepository(AppUser).count();
+  if (existingUsers > 0) {
+    console.log('Seed skipped: database already contains users.');
+    await ds.destroy();
+    return;
+  }
+
   const orgRepo = ds.getRepository(Organisation);
   const repRepo = ds.getRepository(SalesRep);
   const produktRepo = ds.getRepository(Produkt);
