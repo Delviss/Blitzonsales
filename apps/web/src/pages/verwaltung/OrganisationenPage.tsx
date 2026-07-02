@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { apiFetch, getUser } from '../../lib/auth';
 import DataTable from '../../components/DataTable';
+import PageHeader from '../../components/PageHeader';
+import { PlusIcon } from '../../components/icons';
 
 interface Org { id: string; name: string; typ: string | null; parentId: string | null; }
 
@@ -22,33 +24,38 @@ export default function OrganisationenPage() {
 
   return (
     <div>
-      <div className="text-[12px] tracking-[2.5px] text-lime font-bold uppercase mb-1">Verwaltung</div>
-      <h1 className="text-2xl font-extrabold mb-6">Organisationen</h1>
-
-      <DataTable<Org>
-        rows={orgs}
-        columns={[
-          { key: 'name', header: 'Name', render: r => <span className="font-semibold text-white">{r.name}</span> },
-          { key: 'typ', header: 'Typ' },
-          { key: 'parentId', header: 'Parent-ID', render: r => <span className="font-mono text-[11px] text-steel">{r.parentId ?? '—'}</span> },
-        ]}
+      <PageHeader
+        kicker="Verwaltung"
+        title="Organisationen"
+        subtitle="Teams und Vertriebsstrukturen der BlitzON Consulting."
       />
 
       {user?.rolle === 'admin_gf' && (
-        <form onSubmit={handleCreate} className="mt-6 bg-panel border border-line rounded-xl p-5 flex gap-3 items-end">
+        <form onSubmit={handleCreate} className="card p-5 mb-6 flex gap-4 items-end flex-wrap animate-fade-up">
           <div>
-            <label className="block text-[11px] font-semibold text-steel uppercase tracking-wide mb-1">Name</label>
-            <input value={newName} onChange={e => setNewName(e.target.value)} required
-              className="bg-navy border border-line rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-lime" />
+            <label className="label">Name</label>
+            <input value={newName} onChange={e => setNewName(e.target.value)} required placeholder="z. B. Team Nord" className="input w-56" />
           </div>
           <div>
-            <label className="block text-[11px] font-semibold text-steel uppercase tracking-wide mb-1">Typ</label>
-            <input value={newTyp} onChange={e => setNewTyp(e.target.value)} placeholder="team / root"
-              className="bg-navy border border-line rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-lime" />
+            <label className="label">Typ</label>
+            <input value={newTyp} onChange={e => setNewTyp(e.target.value)} placeholder="team / root" className="input w-44" />
           </div>
-          <button type="submit" className="bg-lime text-navy font-bold px-4 py-2 rounded-lg hover:bg-lime2 transition-colors">Anlegen</button>
+          <button type="submit" className="btn-primary">
+            <PlusIcon size={15} />
+            Anlegen
+          </button>
         </form>
       )}
+
+      <DataTable<Org>
+        title="Alle Organisationen"
+        rows={orgs}
+        columns={[
+          { key: 'name', header: 'Name', render: r => <span className="font-semibold text-ink">{r.name}</span> },
+          { key: 'typ', header: 'Typ', render: r => r.typ ?? '—' },
+          { key: 'parentId', header: 'Übergeordnet', render: r => <span className="font-mono text-[11px] text-steel">{r.parentId ?? '—'}</span> },
+        ]}
+      />
     </div>
   );
 }

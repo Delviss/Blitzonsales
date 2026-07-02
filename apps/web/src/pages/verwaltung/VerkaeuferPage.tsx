@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../lib/auth';
 import DataTable from '../../components/DataTable';
+import PageHeader from '../../components/PageHeader';
 
 interface Rep { id: string; name: string; iban: string | null; aktiv: boolean; organisation?: { name: string } | null; }
 
@@ -10,15 +11,24 @@ export default function VerkaeuferPage() {
 
   return (
     <div>
-      <div className="text-[12px] tracking-[2.5px] text-lime font-bold uppercase mb-1">Verwaltung</div>
-      <h1 className="text-2xl font-extrabold mb-6">Verkäufer</h1>
+      <PageHeader
+        kicker="Verwaltung"
+        title="Verkäufer"
+        subtitle="Außendienst mit Organisation, Auszahlungsdaten und Status."
+      />
       <DataTable<Rep>
+        title="Alle Verkäufer"
         rows={reps}
         columns={[
-          { key: 'name', header: 'Name', render: r => <span className="font-semibold text-white">{r.name}</span> },
+          { key: 'name', header: 'Name', render: r => <span className="font-semibold text-ink">{r.name}</span> },
           { key: 'organisation', header: 'Organisation', render: r => r.organisation?.name ?? '—' },
           { key: 'iban', header: 'IBAN', render: r => <span className="font-mono text-[11px]">{r.iban ?? '—'}</span> },
-          { key: 'aktiv', header: 'Aktiv', render: r => <span className={r.aktiv ? 'text-green font-bold' : 'text-red font-bold'}>{r.aktiv ? 'Ja' : 'Nein'}</span> },
+          {
+            key: 'aktiv', header: 'Status',
+            render: r => r.aktiv
+              ? <span className="chip bg-green/10 text-green border-green/30"><span className="h-1.5 w-1.5 rounded-full bg-green" />Aktiv</span>
+              : <span className="chip bg-red/10 text-red border-red/30"><span className="h-1.5 w-1.5 rounded-full bg-red" />Inaktiv</span>,
+          },
         ]}
       />
     </div>
