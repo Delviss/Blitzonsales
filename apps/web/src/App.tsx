@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useState } from 'react';
 import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
 import OrganisationenPage from './pages/verwaltung/OrganisationenPage';
 import VerkaeuferPage from './pages/verwaltung/VerkaeuferPage';
 import ProduktePage from './pages/verwaltung/ProduktePage';
@@ -10,7 +9,8 @@ import ProvisionsregelnPage from './pages/verwaltung/ProvisionsregelnPage';
 import ProvisionslaeufePage from './pages/ProvisionslaeufePage';
 import ProvisionslaufDetailPage from './pages/ProvisionslaufDetailPage';
 import ImportPage from './pages/ImportPage';
-import Layout from './components/Layout';
+import { AppShell } from './components/app-shell';
+import { Dashboard } from './components/dashboard';
 import { getUser } from './lib/auth';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -24,9 +24,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage onLogin={rerender} />} />
-      <Route path="/" element={<RequireAuth><Layout /></RequireAuth>}>
+      <Route path="/" element={<RequireAuth><AppShell /></RequireAuth>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="verwaltung/organisationen" element={<OrganisationenPage />} />
         <Route path="verwaltung/verkaeufer" element={<VerkaeuferPage />} />
         <Route path="verwaltung/produkte" element={<ProduktePage />} />

@@ -2,13 +2,81 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: dark;
-}
+/* ---------------------------------------------------------------------------
+ * Design tokens (shadcn-style). Dark is the default BlitzON Control theme and
+ * matches the redesigned Efferd shell; light is available via the theme toggle
+ * in the sidebar header.
+ * ------------------------------------------------------------------------- */
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: 0 0% 100%;
+    --foreground: 240 10% 8%;
+    --contrast: 240 10% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 8%;
+    --primary: 240 6% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 5% 94%;
+    --secondary-foreground: 240 6% 25%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 44%;
+    --accent: 240 5% 94%;
+    --accent-foreground: 240 6% 10%;
+    --destructive: 5 78% 55%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 6% 89%;
+    --input: 240 6% 86%;
+    --ring: 240 5% 62%;
+    --radius: 0.75rem;
+    --sidebar-background: 240 8% 98%;
+    --sidebar-foreground: 240 5% 30%;
+    --sidebar-accent: 240 5% 92%;
+    --sidebar-accent-foreground: 240 6% 10%;
+    --sidebar-border: 240 6% 90%;
+    --sidebar-ring: 240 5% 62%;
+  }
 
-body {
-  @apply bg-night text-ink font-sans;
-  -webkit-font-smoothing: antialiased;
+  .dark {
+    color-scheme: dark;
+    --background: 240 6% 4%;
+    --foreground: 220 14% 93%;
+    --contrast: 0 0% 100%;
+    --card: 240 5% 6%;
+    --card-foreground: 220 14% 93%;
+    --popover: 240 5% 8%;
+    --popover-foreground: 220 14% 93%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 6% 8%;
+    --secondary: 240 4% 14%;
+    --secondary-foreground: 220 10% 78%;
+    --muted: 240 5% 10%;
+    --muted-foreground: 240 4% 58%;
+    --accent: 240 4% 12%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 5 84% 62%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5% 14%;
+    --input: 240 5% 16%;
+    --ring: 240 5% 46%;
+    --sidebar-background: 240 6% 3.5%;
+    --sidebar-foreground: 240 5% 68%;
+    --sidebar-accent: 240 4% 11%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 5% 12%;
+    --sidebar-ring: 240 5% 46%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    -webkit-font-smoothing: antialiased;
+  }
 }
 
 ::selection {
@@ -18,14 +86,14 @@ body {
 /* Slim, unobtrusive scrollbars */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #1b2c42 transparent;
+  scrollbar-color: hsl(var(--border)) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #1b2c42;
+  background: hsl(var(--border));
   border-radius: 8px;
 }
 *::-webkit-scrollbar-track {
@@ -33,7 +101,7 @@ body {
 }
 
 @layer components {
-  /* Ambient page backdrop: cyan glow + faint grid */
+  /* Ambient page backdrop (login screen): cyan glow + faint grid */
   .ambient {
     position: fixed;
     inset: 0;
@@ -48,8 +116,8 @@ body {
     position: absolute;
     inset: 0;
     background-image:
-      linear-gradient(rgba(169, 189, 206, 0.045) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(169, 189, 206, 0.045) 1px, transparent 1px);
+      linear-gradient(hsl(var(--muted-foreground) / 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--muted-foreground) / 0.06) 1px, transparent 1px);
     background-size: 44px 44px;
     mask-image: radial-gradient(70rem 44rem at 50% -10%, black 20%, transparent 75%);
   }
