@@ -7,7 +7,6 @@ import {
   Cell,
   ComposedChart,
   Legend,
-  Line,
   Pie,
   PieChart,
   ResponsiveContainer,
