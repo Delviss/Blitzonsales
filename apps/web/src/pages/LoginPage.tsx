@@ -125,7 +125,7 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
   );
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center px-4 py-12 overflow-hidden">
+    <div className="dark bg-background text-foreground min-h-screen relative flex items-center justify-center px-4 py-12 overflow-hidden">
       <div className="ambient" />
       {/* Ambient bolt glow behind the card */}
       <div

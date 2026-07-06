@@ -210,6 +210,7 @@ export const SidebarMenuButton = React.forwardRef<HTMLButtonElement, SidebarMenu
           'flex w-full items-center gap-2.5 overflow-hidden rounded-lg p-2 text-left text-[13px] font-medium text-sidebar-foreground outline-none transition-colors',
           'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring',
           'data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-accent-foreground',
+          'data-[active=true]:shadow-[inset_2px_0_0_theme(colors.brand)]',
           '[&_svg]:size-4 [&_svg]:shrink-0',
           collapsed && 'justify-center',
           className,

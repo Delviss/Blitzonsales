@@ -3,70 +3,126 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
- * Design tokens (shadcn-style). Dark is the default BlitzON Control theme and
- * matches the redesigned Efferd shell; light is available via the theme toggle
- * in the sidebar header.
+ * Design tokens (shadcn-style). Dark is the default BlitzON Control theme; the
+ * light theme is a fully-designed counterpart (not a naive white flip) with a
+ * tinted page plane, elevated cards and its own chart ramp. Toggle lives in the
+ * sidebar / header.
  * ------------------------------------------------------------------------- */
 @layer base {
   :root {
     color-scheme: light;
-    --background: 0 0% 100%;
-    --foreground: 240 10% 8%;
-    --contrast: 240 10% 4%;
+
+    /* Surfaces — the page plane is a soft cool neutral so white cards lift off
+       it (fixes the "flat white" feel); cards stay pure white for contrast. */
+    --background: 220 30% 96%;
+    --foreground: 222 24% 12%;
+    --contrast: 222 32% 9%;
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 8%;
+    --card-foreground: 222 24% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 8%;
-    --primary: 240 6% 10%;
+    --popover-foreground: 222 24% 12%;
+
+    --primary: 222 22% 14%;
     --primary-foreground: 0 0% 98%;
-    --secondary: 240 5% 94%;
-    --secondary-foreground: 240 6% 25%;
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 44%;
-    --accent: 240 5% 94%;
-    --accent-foreground: 240 6% 10%;
+    --secondary: 220 20% 92%;
+    --secondary-foreground: 222 18% 26%;
+    --muted: 220 22% 93.5%;
+    --muted-foreground: 220 12% 40%;
+    --accent: 220 22% 91%;
+    --accent-foreground: 222 22% 14%;
     --destructive: 5 78% 55%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 6% 89%;
-    --input: 240 6% 86%;
-    --ring: 240 5% 62%;
-    --radius: 0.75rem;
-    --sidebar-background: 240 8% 98%;
-    --sidebar-foreground: 240 5% 30%;
-    --sidebar-accent: 240 5% 92%;
-    --sidebar-accent-foreground: 240 6% 10%;
-    --sidebar-border: 240 6% 90%;
-    --sidebar-ring: 240 5% 62%;
+    --border: 220 18% 87%;
+    --input: 220 18% 84%;
+    --ring: 193 92% 44%;
+    --radius: 0.85rem;
+
+    --sidebar-background: 222 30% 98%;
+    --sidebar-foreground: 220 14% 32%;
+    --sidebar-accent: 193 80% 94%;
+    --sidebar-accent-foreground: 199 90% 24%;
+    --sidebar-border: 220 18% 90%;
+    --sidebar-ring: 193 92% 44%;
+
+    /* Chart ramp — validated categorical set for a white chart surface
+       (dataviz six-checks: L-band / chroma / CVD ΔE / contrast all pass). */
+    --chart-1: #0e9dc4;
+    --chart-2: #6a5ae0;
+    --chart-3: #c87a00;
+    --chart-4: #1f9d5a;
+    --chart-5: #d64545;
+    --chart-6: #2a6fd6;
+    --chart-primary: #0aa2ce;
+    --chart-primary-soft: #33bde2;
+    --chart-grid: rgba(15, 23, 42, 0.08);
+    --chart-axis: 220 12% 46%;
+    --chart-fill-strong: 0.28;
+    --chart-fill-soft: 0.02;
+
+    /* Ambient page wash (very subtle in light) */
+    --glow-a: rgba(8, 184, 231, 0.1);
+    --glow-b: rgba(10, 133, 184, 0.08);
+    --grid-line: rgba(30, 41, 59, 0.05);
+
+    /* Elevation — light cards get a soft, layered lift off the tinted plane. */
+    --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 28px -16px rgba(15, 23, 42, 0.18);
+    --shadow-glow: 0 0 0 1px rgba(8, 184, 231, 0.28), 0 14px 40px -18px rgba(8, 184, 231, 0.4);
+    --shadow-pop: 0 24px 60px -22px rgba(15, 23, 42, 0.32);
   }
 
   .dark {
     color-scheme: dark;
-    --background: 240 6% 4%;
-    --foreground: 220 14% 93%;
+
+    --background: 240 8% 4%;
+    --foreground: 220 16% 94%;
     --contrast: 0 0% 100%;
-    --card: 240 5% 6%;
-    --card-foreground: 220 14% 93%;
-    --popover: 240 5% 8%;
-    --popover-foreground: 220 14% 93%;
+    --card: 240 7% 6.5%;
+    --card-foreground: 220 16% 94%;
+    --popover: 240 7% 8.5%;
+    --popover-foreground: 220 16% 94%;
+
     --primary: 0 0% 98%;
     --primary-foreground: 240 6% 8%;
-    --secondary: 240 4% 14%;
-    --secondary-foreground: 220 10% 78%;
-    --muted: 240 5% 10%;
-    --muted-foreground: 240 4% 58%;
-    --accent: 240 4% 12%;
+    --secondary: 240 5% 14%;
+    --secondary-foreground: 220 12% 80%;
+    --muted: 240 6% 10%;
+    --muted-foreground: 240 5% 60%;
+    --accent: 240 5% 13%;
     --accent-foreground: 0 0% 98%;
     --destructive: 5 84% 62%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5% 14%;
-    --input: 240 5% 16%;
-    --ring: 240 5% 46%;
-    --sidebar-background: 240 6% 3.5%;
-    --sidebar-foreground: 240 5% 68%;
-    --sidebar-accent: 240 4% 11%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 240 5% 12%;
-    --sidebar-ring: 240 5% 46%;
+    --border: 240 5% 15%;
+    --input: 240 5% 17%;
+    --ring: 193 90% 50%;
+
+    --sidebar-background: 240 8% 3.5%;
+    --sidebar-foreground: 240 6% 70%;
+    --sidebar-accent: 199 80% 12%;
+    --sidebar-accent-foreground: 193 92% 78%;
+    --sidebar-border: 240 6% 13%;
+    --sidebar-ring: 193 90% 50%;
+
+    /* Chart ramp — validated categorical set for the dark card surface. */
+    --chart-1: #1ca3c4;
+    --chart-2: #8e7ee8;
+    --chart-3: #be861f;
+    --chart-4: #24a968;
+    --chart-5: #de5858;
+    --chart-6: #3e7be0;
+    --chart-primary: #08b8e7;
+    --chart-primary-soft: #3acbf2;
+    --chart-grid: rgba(255, 255, 255, 0.06);
+    --chart-axis: 240 5% 58%;
+    --chart-fill-strong: 0.42;
+    --chart-fill-soft: 0.02;
+
+    --glow-a: rgba(8, 184, 231, 0.16);
+    --glow-b: rgba(10, 133, 184, 0.12);
+    --grid-line: rgba(255, 255, 255, 0.045);
+
+    --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 10px 30px -18px rgba(0, 0, 0, 0.85);
+    --shadow-glow: 0 0 0 1px rgba(8, 184, 231, 0.25), 0 8px 40px -12px rgba(8, 184, 231, 0.35);
+    --shadow-pop: 0 20px 60px -20px rgba(0, 0, 0, 0.85);
   }
 
   * {
@@ -76,11 +132,12 @@
   body {
     @apply bg-background text-foreground font-sans;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 }
 
 ::selection {
-  background: rgba(8, 184, 231, 0.35);
+  background: rgba(8, 184, 231, 0.32);
 }
 
 /* Slim, unobtrusive scrollbars */
@@ -96,28 +153,53 @@
   background: hsl(var(--border));
   border-radius: 8px;
 }
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
 *::-webkit-scrollbar-track {
   background: transparent;
 }
 
 @layer components {
-  /* Ambient page backdrop (login screen): cyan glow + faint grid */
+  /* App-wide ambient backdrop: brand glow at the corners + a faint grid that
+     fades out. Attached to the app frame so every page shares one atmosphere. */
+  .app-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(46rem 30rem at 100% -8%, var(--glow-a), transparent 60%),
+      radial-gradient(40rem 28rem at -8% 108%, var(--glow-b), transparent 62%);
+  }
+  .app-backdrop::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 52px 52px;
+    mask-image: radial-gradient(60rem 40rem at 70% 0%, black 10%, transparent 70%);
+  }
+
+  /* Login-screen ambient (kept for that page's centered composition) */
   .ambient {
     position: fixed;
     inset: 0;
     z-index: -1;
     pointer-events: none;
     background:
-      radial-gradient(52rem 30rem at 85% -10%, rgba(8, 184, 231, 0.13), transparent 60%),
-      radial-gradient(40rem 26rem at -10% 110%, rgba(10, 133, 184, 0.1), transparent 60%);
+      radial-gradient(52rem 30rem at 85% -10%, var(--glow-a), transparent 60%),
+      radial-gradient(40rem 26rem at -10% 110%, var(--glow-b), transparent 60%);
   }
   .ambient::after {
     content: '';
     position: absolute;
     inset: 0;
     background-image:
-      linear-gradient(hsl(var(--muted-foreground) / 0.06) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(var(--muted-foreground) / 0.06) 1px, transparent 1px);
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
     background-size: 44px 44px;
     mask-image: radial-gradient(70rem 44rem at 50% -10%, black 20%, transparent 75%);
   }
@@ -164,6 +246,11 @@
 
   .skeleton {
     @apply rounded-lg bg-gradient-to-r from-navy2 via-line/60 to-navy2 bg-[length:500px_100%] animate-shimmer;
+  }
+
+  /* Thin brand rule used above section titles / page headers */
+  .accent-rule {
+    @apply inline-block h-px w-6 bg-gradient-to-r from-brand to-transparent;
   }
 }
 

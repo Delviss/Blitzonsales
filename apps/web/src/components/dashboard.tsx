@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Area,
   Bar,
   BarChart,
+  CartesianGrid,
   Cell,
+  ComposedChart,
   Legend,
   Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -18,9 +20,11 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CheckCircle2,
+  FileCheck2,
   FilePlus2,
   TrendingDown,
   TrendingUp,
+  Users,
   Wallet,
 } from 'lucide-react';
 import { apiFetch, formatEur, getUser } from '@/lib/auth';
@@ -74,20 +78,32 @@ interface DashboardData {
 
 /* ------------------------------ chart theming ---------------------------- */
 
-/* Efferd look: monochrome marks driven by the theme tokens; the categorical
-   donut set stays CVD-validated against the card surface (dataviz palette). */
-const TICK = { fill: 'hsl(var(--muted-foreground))', fontSize: 11 };
-const CATEGORICAL = ['#1794C6', '#C98500', '#9085E9', '#E66767'];
+/* Colours are driven by the per-theme chart ramp declared in index.css. The
+   categorical set is the dataviz six-checks-validated palette (own steps for the
+   light-white and dark card surfaces); the hero charts use the BlitzON brand
+   cyan. Everything reads from CSS variables so it re-themes with the toggle. */
+const TICK = { fill: 'hsl(var(--chart-axis))', fontSize: 11 };
+const GRID = 'var(--chart-grid)';
+const PRIMARY = 'var(--chart-primary)';
+const CATEGORICAL = [
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+  'var(--chart-6)',
+];
 const TOOLTIP_STYLE: React.CSSProperties = {
   background: 'hsl(var(--popover))',
   border: '1px solid hsl(var(--border))',
-  borderRadius: 10,
+  borderRadius: 12,
   color: 'hsl(var(--popover-foreground))',
-  boxShadow: '0 12px 32px -12px rgba(0,0,0,0.5)',
+  boxShadow: '0 16px 40px -16px rgba(0,0,0,0.55)',
   fontSize: 12,
+  padding: '8px 12px',
 };
-const TOOLTIP_LABEL: React.CSSProperties = { color: 'hsl(var(--muted-foreground))' };
-const CURSOR = { fill: 'hsl(var(--muted) / 0.5)' };
+const TOOLTIP_LABEL: React.CSSProperties = { color: 'hsl(var(--muted-foreground))', marginBottom: 2 };
+const CURSOR = { fill: 'var(--chart-primary)', fillOpacity: 0.08 };
 
 function formatPeriode(periode: string): string {
   const [y, m] = periode.split('-').map(Number);
@@ -139,26 +155,51 @@ function TrendRow({
   );
 }
 
+const KPI_ACCENTS = {
+  brand: 'text-brand bg-brand/10 ring-brand/20',
+  green: 'text-green bg-green/10 ring-green/20',
+  amber: 'text-amber bg-amber/10 ring-amber/20',
+  violet: 'text-chart-2 bg-chart-2/10 ring-chart-2/20',
+} as const;
+
 function KpiCell({
   label,
   value,
   trend,
+  icon: Icon,
+  accent = 'brand',
 }: {
   label: string;
   value: React.ReactNode;
   trend: React.ReactNode;
+  icon: React.ComponentType<{ className?: string }>;
+  accent?: keyof typeof KPI_ACCENTS;
 }) {
   return (
-    <div className="p-5">
-      <div className="text-[13px] text-muted-foreground">{label}</div>
-      {value === undefined || value === null ? (
-        <div className="skeleton mt-2 h-8 w-24" />
-      ) : (
-        <div className="mt-1.5 text-[26px] font-semibold leading-none tracking-tight text-foreground tabular-nums">
-          {value}
+    <div className="group relative p-5">
+      {/* left brand seam, revealed on hover */}
+      <span className="pointer-events-none absolute inset-y-4 left-0 w-0.5 rounded-full bg-brand/0 transition-colors duration-300 group-hover:bg-brand/60" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[13px] text-muted-foreground">{label}</div>
+          {value === undefined || value === null ? (
+            <div className="skeleton mt-2 h-8 w-24" />
+          ) : (
+            <div className="mt-1.5 text-[26px] font-semibold leading-none tracking-tight text-foreground tabular-nums">
+              {value}
+            </div>
+          )}
+          {trend}
         </div>
-      )}
-      {trend}
+        <div
+          className={cn(
+            'flex size-9 shrink-0 items-center justify-center rounded-xl ring-1 transition-transform duration-300 group-hover:scale-110',
+            KPI_ACCENTS[accent],
+          )}
+        >
+          <Icon className="size-4" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -192,7 +233,12 @@ function ChartCard({
   children: React.ReactElement;
 }) {
   return (
-    <Card className={cn('animate-fade-up', className)}>
+    <Card
+      className={cn(
+        'animate-fade-up transition-all duration-300 hover:border-brand/30 hover:shadow-glow',
+        className,
+      )}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
           <CardTitle className="text-[15px]">{title}</CardTitle>
@@ -304,13 +350,24 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
-      {/* Shared gradient for all monochrome bar charts (url(#efferdBar) resolves
-          document-wide, so it must live outside the individual chart SVGs). */}
+      {/* Shared gradients — url(#…) resolves document-wide, so they live in one
+          hidden SVG outside the individual chart SVGs. */}
       <svg width="0" height="0" className="absolute" aria-hidden focusable="false">
         <defs>
-          <linearGradient id="efferdBar" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="hsl(var(--contrast))" stopOpacity={0.85} />
-            <stop offset="100%" stopColor="hsl(var(--contrast))" stopOpacity={0.15} />
+          {/* Hero brand bar: bright cyan top fading toward the baseline. */}
+          <linearGradient id="barCyan" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--chart-primary-soft)" stopOpacity={0.98} />
+            <stop offset="100%" stopColor="var(--chart-primary)" stopOpacity={0.35} />
+          </linearGradient>
+          {/* Area fill under the contracts line. */}
+          <linearGradient id="areaCyan" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--chart-primary)" stopOpacity={0.32} />
+            <stop offset="100%" stopColor="var(--chart-primary)" stopOpacity={0} />
+          </linearGradient>
+          {/* Area fill under the storno line (red). */}
+          <linearGradient id="areaStorno" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--chart-5)" stopOpacity={0.26} />
+            <stop offset="100%" stopColor="var(--chart-5)" stopOpacity={0} />
           </linearGradient>
         </defs>
       </svg>
@@ -321,21 +378,29 @@ export function Dashboard() {
           <KpiCell
             label="Aktive Verkäufer"
             value={kpis?.activeReps}
+            icon={Users}
+            accent="brand"
             trend={<TrendRow delta={null} label={isRep ? 'dein Zugang' : 'im Zugriffsbereich'} />}
           />
           <KpiCell
             label={isRep ? 'Meine Provision' : 'Nettoprovision'}
             value={kpis ? formatEur(kpis.netCommission) : undefined}
+            icon={Wallet}
+            accent="green"
             trend={<TrendRow delta={null} label="aus freigegebenen Läufen" />}
           />
           <KpiCell
             label="Stornoquote"
             value={current ? `${current.rate.toLocaleString('de-DE')}%` : kpis ? '0%' : undefined}
+            icon={AlertTriangle}
+            accent="amber"
             trend={<TrendRow delta={stornoDeltaPp} suffix=" Pp." goodWhenDown />}
           />
           <KpiCell
             label="Gültige Verträge"
             value={kpis?.validContracts}
+            icon={FileCheck2}
+            accent="violet"
             trend={<TrendRow delta={contractsDelta} />}
           />
         </div>
@@ -350,10 +415,20 @@ export function Dashboard() {
           height={280}
         >
           <BarChart data={barData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+            <CartesianGrid vertical={false} stroke={GRID} strokeDasharray="3 4" />
             <XAxis dataKey="label" tick={TICK} axisLine={false} tickLine={false} dy={8} />
             <YAxis hide />
             <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={TOOLTIP_LABEL} cursor={CURSOR} />
-            <Bar dataKey="total" name="Verträge" fill="url(#efferdBar)" radius={[6, 6, 0, 0]} maxBarSize={56} />
+            <Bar
+              dataKey="total"
+              name="Verträge"
+              fill="url(#barCyan)"
+              stroke={PRIMARY}
+              strokeOpacity={0.5}
+              radius={[6, 6, 0, 0]}
+              maxBarSize={56}
+              activeBar={{ fill: PRIMARY, stroke: PRIMARY }}
+            />
           </BarChart>
         </ChartCard>
 
@@ -363,28 +438,39 @@ export function Dashboard() {
           badge={<ChartBadge value={stornoDeltaPp} goodWhenDown />}
           height={280}
         >
-          <LineChart data={barData} margin={{ top: 12, right: 12, left: 12, bottom: 0 }}>
+          <ComposedChart data={barData} margin={{ top: 12, right: 12, left: 12, bottom: 0 }}>
+            <CartesianGrid vertical={false} stroke={GRID} strokeDasharray="3 4" />
             <XAxis dataKey="label" tick={TICK} axisLine={false} tickLine={false} dy={8} />
             <YAxis hide />
-            <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={TOOLTIP_LABEL} />
-            <Line
-              type="stepAfter"
+            <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={TOOLTIP_LABEL} cursor={{ stroke: GRID, strokeWidth: 1 }} />
+            <Legend
+              wrapperStyle={{ fontSize: 11.5, paddingTop: 4 }}
+              iconType="plainline"
+              iconSize={14}
+              formatter={(value: string) => <span style={{ color: 'hsl(var(--muted-foreground))' }}>{value}</span>}
+            />
+            <Area
+              type="monotone"
               dataKey="total"
               name="Verträge"
-              stroke="hsl(var(--contrast))"
-              strokeWidth={2}
+              stroke={PRIMARY}
+              strokeWidth={2.5}
+              fill="url(#areaCyan)"
               dot={false}
-              style={{ filter: 'drop-shadow(0 0 6px hsl(var(--contrast) / 0.45))' }}
+              activeDot={{ r: 4, fill: PRIMARY, stroke: 'hsl(var(--card))', strokeWidth: 2 }}
+              style={{ filter: 'drop-shadow(0 2px 8px var(--chart-primary))' }}
             />
-            <Line
-              type="stepAfter"
+            <Area
+              type="monotone"
               dataKey="cancelled"
               name="Stornos"
-              stroke="hsl(var(--muted-foreground))"
-              strokeWidth={2}
+              stroke="var(--chart-5)"
+              strokeWidth={2.5}
+              fill="url(#areaStorno)"
               dot={false}
+              activeDot={{ r: 4, fill: 'var(--chart-5)', stroke: 'hsl(var(--card))', strokeWidth: 2 }}
             />
-          </LineChart>
+          </ComposedChart>
         </ChartCard>
       </div>
 
@@ -487,6 +573,7 @@ export function Dashboard() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
           <ChartCard title="Statusverteilung" description="Verträge nach Vertragsstatus." height={240}>
             <BarChart data={dashboard.statusDistribution} margin={{ top: 8, right: 8, left: 24, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke={GRID} strokeDasharray="3 4" />
               <XAxis
                 dataKey="status"
                 tick={{ ...TICK, fontSize: 9.5 }}
@@ -500,7 +587,7 @@ export function Dashboard() {
               />
               <YAxis hide />
               <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={TOOLTIP_LABEL} cursor={CURSOR} />
-              <Bar dataKey="count" name="Verträge" fill="url(#efferdBar)" radius={[5, 5, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="count" name="Verträge" fill="url(#barCyan)" stroke={PRIMARY} strokeOpacity={0.4} radius={[5, 5, 0, 0]} activeBar={{ fill: PRIMARY }} maxBarSize={28} />
             </BarChart>
           </ChartCard>
 
@@ -537,6 +624,7 @@ export function Dashboard() {
           {!isRep && (
             <ChartCard title="Provision je Organisation" description="Freigegebene Provision nach Organisation." height={240}>
               <BarChart data={dashboard.byOrganisation} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke={GRID} strokeDasharray="3 4" />
                 <XAxis dataKey="name" tick={TICK} axisLine={false} tickLine={false} dy={6} />
                 <YAxis hide />
                 <Tooltip
@@ -545,13 +633,14 @@ export function Dashboard() {
                   cursor={CURSOR}
                   formatter={(v: number) => formatEur(v)}
                 />
-                <Bar dataKey="commission" name="Provision" fill="url(#efferdBar)" radius={[5, 5, 0, 0]} maxBarSize={36} />
+                <Bar dataKey="commission" name="Provision" fill="url(#barCyan)" stroke={PRIMARY} strokeOpacity={0.4} radius={[5, 5, 0, 0]} activeBar={{ fill: PRIMARY }} maxBarSize={36} />
               </BarChart>
             </ChartCard>
           )}
 
           <ChartCard title="Provision je Produkt" description="Freigegebene Provision nach Produkt." height={240}>
             <BarChart data={dashboard.byProdukt} margin={{ top: 8, right: 8, left: 24, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke={GRID} strokeDasharray="3 4" />
               <XAxis
                 dataKey="name"
                 tick={{ ...TICK, fontSize: 9.5 }}
@@ -569,13 +658,14 @@ export function Dashboard() {
                 cursor={CURSOR}
                 formatter={(v: number) => formatEur(v)}
               />
-              <Bar dataKey="commission" name="Provision" fill="url(#efferdBar)" radius={[5, 5, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="commission" name="Provision" fill="url(#barCyan)" stroke={PRIMARY} strokeOpacity={0.4} radius={[5, 5, 0, 0]} activeBar={{ fill: PRIMARY }} maxBarSize={28} />
             </BarChart>
           </ChartCard>
 
           {!isRep && (
             <ChartCard title="Auszahlung je Verkäufer" description="Freigegebene Auszahlungen nach Verkäufer." height={240}>
               <BarChart data={dashboard.payoutsByRep} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke={GRID} strokeDasharray="3 4" />
                 <XAxis
                   dataKey="name"
                   tick={{ ...TICK, fontSize: 9.5 }}
@@ -593,7 +683,7 @@ export function Dashboard() {
                   cursor={CURSOR}
                   formatter={(v: number) => formatEur(v)}
                 />
-                <Bar dataKey="betrag" name="Auszahlung" fill="url(#efferdBar)" radius={[5, 5, 0, 0]} maxBarSize={28} />
+                <Bar dataKey="betrag" name="Auszahlung" fill="url(#barCyan)" stroke={PRIMARY} strokeOpacity={0.4} radius={[5, 5, 0, 0]} activeBar={{ fill: PRIMARY }} maxBarSize={28} />
               </BarChart>
             </ChartCard>
           )}

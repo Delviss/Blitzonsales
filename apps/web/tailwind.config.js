@@ -74,6 +74,17 @@ export default {
         red: '#F0604D',
         amber: '#F2B33D',
         green: '#34C97C',
+
+        /* Chart ramp — validated per-theme via CSS variables (see index.css). */
+        chart: {
+          1: 'var(--chart-1)',
+          2: 'var(--chart-2)',
+          3: 'var(--chart-3)',
+          4: 'var(--chart-4)',
+          5: 'var(--chart-5)',
+          6: 'var(--chart-6)',
+          primary: 'var(--chart-primary)',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -85,9 +96,9 @@ export default {
         mono: ['ui-monospace', 'Menlo', 'Consolas', 'monospace'],
       },
       boxShadow: {
-        glow: '0 0 0 1px rgba(8,184,231,0.25), 0 8px 40px -12px rgba(8,184,231,0.35)',
-        card: '0 1px 0 rgba(255,255,255,0.03) inset, 0 10px 30px -18px rgba(0,0,0,0.8)',
-        pop: '0 20px 60px -20px rgba(0,0,0,0.85)',
+        glow: 'var(--shadow-glow)',
+        card: 'var(--shadow-card)',
+        pop: 'var(--shadow-pop)',
       },
       keyframes: {
         'fade-up': {

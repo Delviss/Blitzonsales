@@ -22,6 +22,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { getUser, logout } from '@/lib/auth';
+import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -80,6 +81,41 @@ function useTheme() {
     }
   };
   return { dark, toggle };
+}
+
+/* An iOS-style dual-icon switch: the thumb slides behind the active icon, which
+   lights up (sun → amber in light, moon → brand cyan in dark). Replaces the flat
+   ghost icon-button so the mode you're in is unmistakable at a glance. */
+function ThemeToggle({ className }: { className?: string }) {
+  const { dark, toggle } = useTheme();
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={dark}
+      aria-label={dark ? 'Zu hellem Design wechseln' : 'Zu dunklem Design wechseln'}
+      title={dark ? 'Helles Design' : 'Dunkles Design'}
+      onClick={toggle}
+      className={cn(
+        'relative inline-flex h-7 w-[52px] shrink-0 items-center rounded-full border border-border bg-muted/70 p-0.5 outline-none transition-colors hover:border-brand/40 focus-visible:ring-2 focus-visible:ring-ring',
+        className,
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'absolute top-0.5 h-6 w-6 rounded-full bg-card shadow-[0_2px_6px_rgba(0,0,0,0.25)] ring-1 ring-border transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+          dark ? 'translate-x-[24px]' : 'translate-x-0',
+        )}
+      />
+      <span className="relative z-10 flex h-6 w-6 items-center justify-center">
+        <Sun className={cn('size-3.5 transition-colors', dark ? 'text-muted-foreground/40' : 'text-amber')} />
+      </span>
+      <span className="relative z-10 flex h-6 w-6 items-center justify-center">
+        <Moon className={cn('size-3.5 transition-colors', dark ? 'text-brand' : 'text-muted-foreground/40')} />
+      </span>
+    </button>
+  );
 }
 
 /* ------------------------------- navigation ------------------------------ */
@@ -143,7 +179,6 @@ function usePageMeta(): { label: string; icon: React.ComponentType<{ className?:
 
 function SidebarBrandRow() {
   const { open, isMobile, setOpen } = useSidebar();
-  const { dark, toggle } = useTheme();
   const collapsed = !open && !isMobile;
 
   if (collapsed) {
@@ -176,15 +211,6 @@ function SidebarBrandRow() {
           <Minimize2 className="!size-3.5" />
         </Button>
       )}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 text-muted-foreground hover:text-foreground"
-        onClick={toggle}
-        title={dark ? 'Helles Design' : 'Dunkles Design'}
-      >
-        {dark ? <Sun className="!size-3.5" /> : <Moon className="!size-3.5" />}
-      </Button>
       <Button
         variant="ghost"
         size="icon"
@@ -373,6 +399,8 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
             {page.label}
           </div>
           <div className="ml-auto flex items-center gap-1.5">
+            <ThemeToggle />
+            <Separator orientation="vertical" className="mx-0.5 h-4" />
             <Button
               variant="ghost"
               size="icon"
@@ -389,8 +417,9 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
           </div>
         </header>
 
-        <div key={location.pathname} className="flex-1 animate-fade-in p-4 md:p-6">
-          {children ?? <Outlet />}
+        <div key={location.pathname} className="relative flex-1 animate-fade-in p-4 md:p-6">
+          <div className="app-backdrop" />
+          <div className="relative z-[1]">{children ?? <Outlet />}</div>
         </div>
       </SidebarInset>
     </SidebarProvider>
