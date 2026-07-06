@@ -69,6 +69,18 @@ from running it (dashboard is fast at ~2,900 contracts; `generate()` has an N+1 
 batching before much larger volumes). Docs: `docs/datenschutz.md`, `docs/runbook.md`,
 German-language `docs/admin-guide.md`.
 
+UI redesign (post-Phase 5): the web app was restyled after the Efferd Dashboard 2 layout
+(21st.dev, `larsen66/efferd-dashboard-2`) with the logic mapped onto BlitzON Control
+features. `apps/web` now has a shadcn-style structure (`@/` alias, `src/components/ui/`
+primitives, CSS-variable design tokens with a dark default and a light theme toggle).
+`components/app-shell.tsx` is the new collapsible-sidebar shell (role-filtered navigation,
+user menu, notifications) replacing the old top-bar `Layout`; `components/dashboard.tsx`
+replaces `DashboardPage` with KPI cells (month-over-month trends computed from closed
+months only), Vertragseingang/Storno-Trend hero charts, Letzte Verträge, a Storno-Check
+health card, an activity feed fed by Provisionsläufe/contract data, and all previous
+role-scoped analytics charts. Legacy pages inherit the theme via token-remapped Tailwind
+color names and continue to work unchanged inside the new shell.
+
 ## Open Questions
 
 1. **Resolved (assumption)**: `erfassungsdatum` missing/serial-0 defaults to the import
