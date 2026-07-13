@@ -47,7 +47,8 @@ async function seed() {
   await orgRepo.save(root);
   const spear = orgRepo.create({ name: 'Spear Vertrieb', parentId: root.id, typ: 'team' });
   const highlevel = orgRepo.create({ name: 'Highlevel UG', parentId: root.id, typ: 'team' });
-  const augsburg = orgRepo.create({ name: 'Team Augsburg', parentId: root.id, typ: 'team' });
+  // Team Augsburg is a partner org (I-04): its reps use the partner tiers/shares.
+  const augsburg = orgRepo.create({ name: 'Team Augsburg', parentId: root.id, typ: 'team', orgTyp: 'partner' });
   await orgRepo.save([spear, highlevel, augsburg]);
 
   // Produkte
@@ -71,6 +72,12 @@ async function seed() {
     )
   );
 
+  // A direct training relationship (I-19): reps[0] trains reps[3] so overheads
+  // on reps[3]'s contracts flow to reps[0]. No multi-level pyramid.
+  reps[0].rolle = 'trainer';
+  reps[3].trainerId = reps[0].id;
+  await repRepo.save([reps[0], reps[3]]);
+
   // Users: one per role, for RBAC testing
   const pw = await bcrypt.hash('BlitzDev2026!', 12);
   await userRepo.save([
@@ -91,21 +98,35 @@ async function seed() {
     'SWG0263500', 'SWG0264001', 'SWG0264050', '203513',
     'SWG0264200', 'SWG0264300',
   ];
-  const contracts = joulesIds.map((joulesId, i) =>
-    contractRepo.create({
+  const contracts = joulesIds.map((joulesId, i) => {
+    const produkt = produkte[i % produkte.length];
+    const energie = produkt.energie === 'Gas' ? 'gas' : 'strom';
+    const bestand = produkt.bestand;
+    const gewerbe = i === 8; // one commercial contract to exercise the Gewerbe engine
+    const lieferbeginn = statuses[i].includes('Widerruf') || statuses[i].includes('Abgelehnt') ? null : '2026-07-01';
+    return contractRepo.create({
       joulesId,
       repId: reps[i % reps.length].id,
-      produktId: produkte[i % produkte.length].id,
+      produktId: produkt.id,
       organisationId: root.id,
       kunde: `Kunde ${i + 1}`,
       plz: '86150',
       ort: 'Augsburg',
       verbrauch: 2500 + i * 100,
       erfassungsdatum: '2026-05-15',
-      lieferbeginn: statuses[i].includes('Widerruf') || statuses[i].includes('Abgelehnt') ? null : '2026-07-01',
+      lieferbeginn,
       status: statuses[i],
-    })
-  );
+      // --- I-02 Fachkonzept shape so a Fachkonzept-Provisionslauf has data ---
+      swaOrderNumber: joulesId,
+      tariffEnergyType: energie,
+      clientType: gewerbe ? 'gewerbe' : 'privat',
+      startDeliveryType: bestand ? 'bestandskunde' : 'neukunde',
+      previousVolume: gewerbe ? 120000 : null,
+      rateExtraProfitProvision: gewerbe ? 4 : null,
+      swaZahlbetrag: gewerbe ? 4000 : null,
+      kreditcheckDatum: gewerbe ? '2026-05-20' : null,
+    });
+  });
   await contractRepo.save(contracts);
 
   // Versioned business config (I-01): seed the initial valid-from version of
