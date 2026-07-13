@@ -58,7 +58,27 @@ export class SalesRep {
   @Column({ name: 'negativsaldo', type: 'numeric', precision: 12, scale: 2, default: 0 })
   negativsaldo: number;
 
-  /** Storno account balance from the 10% withholding (I-18/I-23). */
+  /** Storno account net balance from the 10% withholding (I-18/I-23). */
   @Column({ name: 'storno_konto_saldo', type: 'numeric', precision: 12, scale: 2, default: 0 })
   stornoKontoSaldo: number;
+
+  // --- I-23 · storno account breakdown (Fachkonzept ch. 10.1) ---
+  // Cumulative running totals so the posting object can show every ch. 10.1
+  // field: gesamtsaldo = privat + gewerbe − clawbacks − freigegeben.
+
+  /** Cumulative privately-reserved withholding (10% of private commission). */
+  @Column({ name: 'storno_privat_einbehalt', type: 'numeric', precision: 12, scale: 2, default: 0 })
+  stornoPrivatEinbehalt: number;
+
+  /** Cumulative commercially-reserved withholding (10% of commercial commission). */
+  @Column({ name: 'storno_gewerbe_einbehalt', type: 'numeric', precision: 12, scale: 2, default: 0 })
+  stornoGewerbeEinbehalt: number;
+
+  /** Cumulative clawback offsets taken from the storno account (I-25). */
+  @Column({ name: 'storno_clawback_genutzt', type: 'numeric', precision: 12, scale: 2, default: 0 })
+  stornoClawbackGenutzt: number;
+
+  /** Cumulative manual releases out of the storno account. */
+  @Column({ name: 'storno_freigegeben', type: 'numeric', precision: 12, scale: 2, default: 0 })
+  stornoFreigegeben: number;
 }

@@ -10,6 +10,8 @@ import { AuditService } from '../../audit/audit.service';
 import { BusinessConfigService } from '../../config-store/business-config.service';
 import { LedgerService } from '../../config-store/ledger.service';
 import { StatusMasterService } from '../../status-master/status-master.service';
+import { CommercialReserveService } from '../../posting-objects/commercial-reserve.service';
+import { StornoAccountService } from '../../posting-objects/storno-account.service';
 import {
   computeFachkonzeptRun,
   FachkonzeptRunConfig,
@@ -42,6 +44,8 @@ export class FachkonzeptRunService {
     private readonly ledger: LedgerService,
     private readonly audit: AuditService,
     private readonly statusMaster: StatusMasterService,
+    private readonly reserves: CommercialReserveService,
+    private readonly storno: StornoAccountService,
   ) {}
 
   findAll(organisationId?: string) {
@@ -97,9 +101,26 @@ export class FachkonzeptRunService {
     );
     await this.lineRepo.save(rows);
 
+    // I-14: persist the expected/deviation/plausibility onto each contract so the
+    // deviation report and the master-data view surface it (the actual SWA list
+    // stays the booking truth; we only record the comparison).
+    for (const p of result.plausibilities) {
+      await this.contractRepo.update(
+        { id: p.contractId },
+        {
+          erwarteteSwaProvision: p.erwartet,
+          tatsaechlicheSwaProvision: p.tatsaechlich,
+          abweichung: p.abweichung,
+          plausibilitaetStatus: p.status,
+        },
+      );
+    }
+
     run.fachkonzeptZusammenfassung = {
       repSummaries: result.repSummaries,
       reserves: result.reserves,
+      plausibilities: result.plausibilities,
+      swaTier: result.swaTier,
       totals: result.totals,
       warnungen: result.warnungen,
     };
@@ -131,22 +152,37 @@ export class FachkonzeptRunService {
     // Post the salary-protection balance deltas to each rep (I-18). freigeben is
     // one-way (rejects an already-approved run) so this is applied exactly once.
     for (const rep of summary.repSummaries ?? []) {
-      if (rep.negativsaldoDelta === 0 && rep.stornoEinbehalt === 0) continue;
-      await this.repRepo.increment({ id: rep.repId }, 'negativsaldo', rep.negativsaldoDelta);
-      await this.repRepo.increment({ id: rep.repId }, 'stornoKontoSaldo', rep.stornoEinbehalt);
-      if (rep.negativsaldoDelta > 0) {
+      // Negative-commission balance: +accrual (low month) / −recovery (high month, I-18).
+      if (rep.negativsaldoDelta !== 0) {
+        await this.repRepo.increment({ id: rep.repId }, 'negativsaldo', rep.negativsaldoDelta);
         await this.ledger.appendFinancial({
-          monat: run.periode, typ: 'negativsaldo_vorschuss', betrag: rep.negativsaldoDelta,
+          monat: run.periode,
+          typ: rep.negativsaldoDelta > 0 ? 'negativsaldo_vorschuss' : 'negativsaldo_tilgung',
+          betrag: rep.negativsaldoDelta,
           quelle: 'run', akteur: userId, begruendung: `Provisionslauf ${run.id}`,
         });
       }
-      if (rep.stornoEinbehalt > 0) {
-        await this.ledger.appendFinancial({
-          monat: run.periode, typ: 'storno_einbehalt', betrag: rep.stornoEinbehalt,
-          quelle: 'run', akteur: userId, begruendung: `Provisionslauf ${run.id}`,
-        });
-      }
+      // 10% storno withholding, split into the private/commercial reserved
+      // shares of the storno account posting object (I-18 → I-23).
+      const privat = rep.stornoEinbehaltPrivat ?? rep.stornoEinbehalt ?? 0;
+      const gewerbe = rep.stornoEinbehaltGewerbe ?? 0;
+      await this.storno.applyWithholding(rep.repId, privat, gewerbe, run.periode, userId, 'run', `Provisionslauf ${run.id}`);
     }
+
+    // Commercial reserves become persisted posting objects (I-24) and keep an
+    // append-only ledger entry each for the audit trail.
+    await this.reserves.persistForRun(
+      run.id,
+      run.periode,
+      (summary.reserves ?? []).map((r) => ({
+        contractId: r.contractId,
+        repId: r.repId,
+        swaRevenue: r.swaRevenue,
+        profitBeforeReserve: r.profitBeforeReserve,
+        reserveTarget: r.reserveTarget,
+      })),
+      userId,
+    );
     for (const r of summary.reserves ?? []) {
       await this.ledger.appendFinancial({
         contractId: r.contractId, monat: run.periode, typ: 'ruecklage_gewerbe', betrag: r.reserveTarget,
@@ -211,6 +247,7 @@ export class FachkonzeptRunService {
           gesamtverbrauch: num(ct.previousVolume) ?? ct.verbrauch,
           surchargeCt: num(surcharge),
           swaRevenue: num(ct.swaZahlbetrag),
+          actualSwaProvision: num(ct.tatsaechlicheSwaProvision) ?? num(ct.swaGesamtprovision),
           kreditcheckConfirmed: !!ct.kreditcheckDatum,
           lieferbeginnConfirmed: !!ct.lieferbeginn,
         };
@@ -233,6 +270,8 @@ export class FachkonzeptRunService {
       minConsumptionGas: await g<number>(ConfigKey.MinConsumptionGas),
       employeeTier: await g<Tier[]>(ConfigKey.EmployeeTier),
       partnerTier: await g<Tier[]>(ConfigKey.PartnerTier),
+      swaNewCustomerTier: await g<Tier[]>(ConfigKey.SwaNewCustomerTier),
+      plausibilityToleranceAbs: (await this.config.resolve<number>(ConfigKey.PlausibilityToleranceAbs, asOf)) ?? 1,
       fixum: await g<number>(ConfigKey.Fixum),
       employerCostRate: await g<number>(ConfigKey.EmployerCostRate),
       overheadTrainerNew: await g<number>(ConfigKey.OverheadTrainerNew),

@@ -16,6 +16,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { DatenschutzModule } from './datenschutz/datenschutz.module';
 import { ConfigStoreModule } from './config-store/config-store.module';
 import { StatusMasterModule } from './status-master/status-master.module';
+import { PostingObjectsModule } from './posting-objects/posting-objects.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { StatusMasterModule } from './status-master/status-master.module';
     DatenschutzModule,
     ConfigStoreModule,
     StatusMasterModule,
+    PostingObjectsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

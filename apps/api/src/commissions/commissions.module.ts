@@ -14,6 +14,7 @@ import { FachkonzeptRunController } from './fachkonzept/fachkonzept-run.controll
 import { AuditModule } from '../audit/audit.module';
 import { ConfigStoreModule } from '../config-store/config-store.module';
 import { StatusMasterModule } from '../status-master/status-master.module';
+import { PostingObjectsModule } from '../posting-objects/posting-objects.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { StatusMasterModule } from '../status-master/status-master.module';
     AuditModule,
     ConfigStoreModule,
     StatusMasterModule,
+    PostingObjectsModule,
   ],
   providers: [CommissionRulesService, CommissionRunsService, FachkonzeptRunService],
   controllers: [CommissionRulesController, CommissionRunsController, FachkonzeptRunController],

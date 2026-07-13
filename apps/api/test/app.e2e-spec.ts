@@ -215,6 +215,48 @@ describe('BlitzON Control (e2e)', () => {
       .get('/api/provisionslaeufe')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(legacyList.body.every((r: any) => r.verfahren !== 'fachkonzept')).toBe(true);
+
+    // Wave 2: the freigabe posted the storno withholding to the account posting
+    // objects (I-23) and the commercial reserves became posting objects (I-24).
+    const stornoKonten = await request(app.getHttpServer())
+      .get('/api/storno-konten')
+      .set('Authorization', `Bearer ${backofficeToken}`);
+    expect(stornoKonten.status).toBe(200);
+    expect(Array.isArray(stornoKonten.body)).toBe(true);
+    expect(stornoKonten.body[0]).toHaveProperty('freiVerfuegbar');
+
+    const reserveSummary = await request(app.getHttpServer())
+      .get('/api/gewerbe-ruecklagen/summary')
+      .set('Authorization', `Bearer ${backofficeToken}`);
+    expect(reserveSummary.status).toBe(200);
+    expect(reserveSummary.body.total).toHaveProperty('reserveTarget');
+  });
+
+  it('creates a clawback receivable and offsets it in the fixed order (I-25)', async () => {
+    // pick any seeded rep as the causer
+    const reps = await request(app.getHttpServer()).get('/api/verkaeufer').set('Authorization', `Bearer ${adminToken}`);
+    const repId = reps.body[0].id;
+
+    const created = await request(app.getHttpServer())
+      .post('/api/clawbacks')
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ repId, swaClawback: 2000, causerShare: 0.5, grund: 'Widerruf (e2e)' });
+    expect(created.status).toBe(201);
+    expect(created.body.passThrough).toBe(1000); // 2000 × 50%
+    // remaining + all offsets applied must reconstruct the pass-through
+    const offsetSum = (created.body.offsets ?? []).reduce((s: number, o: any) => s + Number(o.applied), 0);
+    expect(offsetSum + Number(created.body.remaining)).toBeCloseTo(1000, 2);
+
+    const list = await request(app.getHttpServer()).get('/api/clawbacks').set('Authorization', `Bearer ${readonlyToken}`);
+    expect(list.status).toBe(200);
+    expect(list.body.some((c: any) => c.id === created.body.id)).toBe(true);
+
+    // read-only may not create a clawback
+    const forbidden = await request(app.getHttpServer())
+      .post('/api/clawbacks')
+      .set('Authorization', `Bearer ${readonlyToken}`)
+      .send({ repId, swaClawback: 100, causerShare: 1 });
+    expect(forbidden.status).toBe(403);
   });
 
   it('lets an admin change a commission rate without affecting already-frozen runs', async () => {

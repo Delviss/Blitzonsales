@@ -5,6 +5,7 @@ import OrganisationenPage from './pages/verwaltung/OrganisationenPage';
 import VerkaeuferPage from './pages/verwaltung/VerkaeuferPage';
 import ProduktePage from './pages/verwaltung/ProduktePage';
 import BenutzerPage from './pages/verwaltung/BenutzerPage';
+import StatusMasterPage from './pages/verwaltung/StatusMasterPage';
 import ProvisionsregelnPage from './pages/verwaltung/ProvisionsregelnPage';
 import ProvisionslaeufePage from './pages/ProvisionslaeufePage';
 import ProvisionslaufDetailPage from './pages/ProvisionslaufDetailPage';
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="verwaltung/organisationen" element={<OrganisationenPage />} />
         <Route path="verwaltung/verkaeufer" element={<VerkaeuferPage />} />
         <Route path="verwaltung/produkte" element={<ProduktePage />} />
+        <Route path="verwaltung/statusstammdaten" element={<StatusMasterPage />} />
         <Route path="verwaltung/benutzer" element={<BenutzerPage />} />
         <Route path="verwaltung/provisionsregeln" element={<ProvisionsregelnPage />} />
         <Route path="provisionslaeufe" element={<ProvisionslaeufePage />} />

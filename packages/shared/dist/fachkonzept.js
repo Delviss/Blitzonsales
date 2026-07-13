@@ -10,7 +10,7 @@
  * the pure calculation functions a typed shape to work against.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FACHKONZEPT_DEFAULTS = exports.ConfigKey = exports.OrgType = exports.RepRole = exports.TariffEnergyType = exports.StartDeliveryType = exports.ClientType = void 0;
+exports.FACHKONZEPT_DEFAULTS = exports.ConfigKey = exports.CollectionsStatus = exports.ReserveStatus = exports.PlausibilityStatus = exports.OrgType = exports.RepRole = exports.TariffEnergyType = exports.StartDeliveryType = exports.ClientType = void 0;
 exports.resolveTierRate = resolveTierRate;
 exports.resolveConfig = resolveConfig;
 /** Private vs. commercial (Gewerbe) customer. Drives which engine applies. */
@@ -47,6 +47,47 @@ var OrgType;
     OrgType["Internal"] = "internal";
     OrgType["Partner"] = "partner";
 })(OrgType || (exports.OrgType = OrgType = {}));
+/**
+ * Plausibility status of the expected-vs-actual SWA commission comparison
+ * (I-14, Fachkonzept ch. 5.2 / 6.1). The actual SWA booking list is always the
+ * truth; deviations are surfaced, never silently corrected.
+ */
+var PlausibilityStatus;
+(function (PlausibilityStatus) {
+    /** Expected and actual match within the tolerance. */
+    PlausibilityStatus["Ok"] = "ok";
+    /** Expected and actual differ beyond the tolerance — needs review. */
+    PlausibilityStatus["Abweichung"] = "abweichung";
+    /** No actual SWA figure yet — still open. */
+    PlausibilityStatus["Offen"] = "offen";
+})(PlausibilityStatus || (exports.PlausibilityStatus = PlausibilityStatus = {}));
+/**
+ * Lifecycle of a commercial reserve posting object (I-24, Fachkonzept ch. 10.2).
+ * A reserve is booked as non-freely-available liquidity, may be flagged
+ * under-funded (actual < target), and is only released after contract end /
+ * final billing.
+ */
+var ReserveStatus;
+(function (ReserveStatus) {
+    ReserveStatus["Gebucht"] = "gebucht";
+    ReserveStatus["Unterdeckt"] = "unterdeckt";
+    ReserveStatus["Freigegeben"] = "freigegeben";
+})(ReserveStatus || (exports.ReserveStatus = ReserveStatus = {}));
+/**
+ * Collections status of the remaining balance of a clawback receivable (I-25,
+ * Fachkonzept ch. 9.4 / 7.5).
+ */
+var CollectionsStatus;
+(function (CollectionsStatus) {
+    /** Fully offset — nothing remaining. */
+    CollectionsStatus["Ausgeglichen"] = "ausgeglichen";
+    /** Remaining balance offset against future commission / storno account. */
+    CollectionsStatus["Offen"] = "offen";
+    /** Invoiced to a departed employee. */
+    CollectionsStatus["Rechnung"] = "rechnung";
+    /** Handed to collections. */
+    CollectionsStatus["Inkasso"] = "inkasso";
+})(CollectionsStatus || (exports.CollectionsStatus = CollectionsStatus = {}));
 /**
  * Resolve the retroactive per-contract rate for a monthly count against a tier
  * table. Because tiers are retroactive, the rate for the highest reached
@@ -94,6 +135,12 @@ var ConfigKey;
      * no value (default `null`), so nothing in the engines assumes a number.
      */
     ConfigKey["ExistingCustomerLeadTimeMonths"] = "existing_customer_lead_time_months";
+    /**
+     * Absolute tolerance (in €) for the SWA plausibility control (I-14): the
+     * expected-vs-actual deviation must exceed this before a contract is flagged
+     * as `abweichung`. Guards against rounding noise.
+     */
+    ConfigKey["PlausibilityToleranceAbs"] = "plausibility_tolerance_abs";
 })(ConfigKey || (exports.ConfigKey = ConfigKey = {}));
 /**
  * Default values for the initial config version. Placeholders where the
@@ -145,6 +192,8 @@ exports.FACHKONZEPT_DEFAULTS = {
     // No fixed value in Phase 1 (I-33): the parameter is prepared but unset, so
     // seedDefaults skips it and resolveConfig returns null until BlitzON sets one.
     [ConfigKey.ExistingCustomerLeadTimeMonths]: null,
+    // €1 tolerance so cent-level rounding never trips the plausibility flag (I-14).
+    [ConfigKey.PlausibilityToleranceAbs]: 1,
 };
 /**
  * Resolve a config value as-of a reference date: the entry with the latest

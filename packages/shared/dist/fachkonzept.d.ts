@@ -38,6 +38,44 @@ export declare enum OrgType {
     Partner = "partner"
 }
 /**
+ * Plausibility status of the expected-vs-actual SWA commission comparison
+ * (I-14, Fachkonzept ch. 5.2 / 6.1). The actual SWA booking list is always the
+ * truth; deviations are surfaced, never silently corrected.
+ */
+export declare enum PlausibilityStatus {
+    /** Expected and actual match within the tolerance. */
+    Ok = "ok",
+    /** Expected and actual differ beyond the tolerance — needs review. */
+    Abweichung = "abweichung",
+    /** No actual SWA figure yet — still open. */
+    Offen = "offen"
+}
+/**
+ * Lifecycle of a commercial reserve posting object (I-24, Fachkonzept ch. 10.2).
+ * A reserve is booked as non-freely-available liquidity, may be flagged
+ * under-funded (actual < target), and is only released after contract end /
+ * final billing.
+ */
+export declare enum ReserveStatus {
+    Gebucht = "gebucht",
+    Unterdeckt = "unterdeckt",
+    Freigegeben = "freigegeben"
+}
+/**
+ * Collections status of the remaining balance of a clawback receivable (I-25,
+ * Fachkonzept ch. 9.4 / 7.5).
+ */
+export declare enum CollectionsStatus {
+    /** Fully offset — nothing remaining. */
+    Ausgeglichen = "ausgeglichen",
+    /** Remaining balance offset against future commission / storno account. */
+    Offen = "offen",
+    /** Invoiced to a departed employee. */
+    Rechnung = "rechnung",
+    /** Handed to collections. */
+    Inkasso = "inkasso"
+}
+/**
  * A retroactive volume tier (Staffel): from `abCount` qualified new customers
  * the per-contract rate is `satz`, applied retroactively to the whole month
  * (I-14/I-15). Tiers are stored ascending by `abCount`.
@@ -83,7 +121,13 @@ export declare enum ConfigKey {
      * Fachkonzept ch. 5.3). Prepared as a system parameter only — Phase 1 fixes
      * no value (default `null`), so nothing in the engines assumes a number.
      */
-    ExistingCustomerLeadTimeMonths = "existing_customer_lead_time_months"
+    ExistingCustomerLeadTimeMonths = "existing_customer_lead_time_months",
+    /**
+     * Absolute tolerance (in €) for the SWA plausibility control (I-14): the
+     * expected-vs-actual deviation must exceed this before a contract is flagged
+     * as `abweichung`. Guards against rounding noise.
+     */
+    PlausibilityToleranceAbs = "plausibility_tolerance_abs"
 }
 /**
  * Default values for the initial config version. Placeholders where the
