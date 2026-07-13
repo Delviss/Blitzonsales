@@ -81,6 +81,58 @@ health card, an activity feed fed by Provisionsläufe/contract data, and all pre
 role-scoped analytics charts. Legacy pages inherit the theme via token-remapped Tailwind
 color names and continue to work unchanged inside the new shell.
 
+## Phase 1 (Fachkonzept v1.0) — Foundation & calculation core
+
+The GitHub tracker carries the BlitzON Fachkonzept „Provisions-, Rücklagen- und
+Steuerungs-Tool" v1.0 as 9 epics (P0…P8, #13–#21) / 37 issues (I-01…I-37). This
+work started with **Epic P0 (Foundation, I-01…I-04)** — the prerequisite every
+other epic depends on — plus the pure calculation functions from P3/P4 whose
+rules and numbers are fully specified in the issues.
+
+**I-01 versioned config (ch. 16):** `packages/shared/src/fachkonzept.ts` defines
+every business value as a `ConfigKey` with a shipped default (`FACHKONZEPT_DEFAULTS`)
+and a pure as-of resolver (`resolveConfig`). `config_version` table +
+`config-store/BusinessConfigService` persist and resolve values as-of a
+reference date so recomputing a closed month uses the version valid then;
+`GET/POST /api/config` (Founder read / Admin write, audited) and `seedDefaults`
+seed the initial valid-from version. Nothing in the engine is hardcoded.
+
+**I-02 contract model (ch. 4.2 / Joules ClientSchema):** `contract` gains
+`swa_order_number`, `client_type`, `start_delivery_type`, `tariff_energy_type`,
+electricity/gas surcharge, `previous_volume`, pre-contract/contract end, term,
+SWA total/paid commission, credit-check/storno dates, expected-vs-actual SWA
+commission + deviation + plausibility status + manual override.
+
+**I-03 status & financial ledger (ch. 4.2/5.2/12.2):** append-only
+`contract_status_event` and `financial_event` tables + `LedgerService`; every
+status/money change is a timestamped event referencing the SWA order number and
+original month, never mutated or deleted.
+
+**I-04 rep/org master data (ch. 3/4.1):** `sales_rep` gains role, base salary,
+join/leave dates, direct trainer/team-lead assignment, negative-balance & storno
+accounts; `organisation` gains type and partner compensation model.
+
+**Calculation core** (`commissions/fachkonzept/fachkonzept-engine.ts`, pure &
+unit-tested against the ch. 14 worked examples that the issues quote):
+minimum-volume qualification (I-13), retroactive employee/partner tiers (I-15/17;
+the 40th new customer recomputes the whole month to €90), existing-customer flat
+€50/€25/€25 (I-20), trainer/team-lead overheads with team-lead replacing trainer
+and electricity+gas as two claims (I-19), the commercial engine incl.
+120,000 kWh × 4 ct = €4,800, caps, 50/50 SWA halves and 25/25 & 35/35 splits
+(I-21), the 20% commercial reserve (I-24), clawback pass-through with the fixed
+offset order (I-25) and salary-protection/storno invariants (I-18). See
+`fachkonzept-engine.spec.ts` (22 tests, all green).
+
+**Still to build (Phase 1 remainder):** persisting the engine outputs into runs,
+the Joules/SWA API client & sync (P2, I-08…I-12), the master-data admin UI (I-07),
+the Founder dashboard & drill-downs (P6), CRM/lead-time follow-up (P7),
+month-end close & the warning system (P8). The exact ch. 14.2 salary euro
+figures and the full SWA new-customer tier table need the authoritative
+Fachkonzept document (the tracker truncates the long issue bodies) — the salary
+function is implemented to the certain invariants and the SWA tier keeps only its
+documented anchors (0–99 €160 … 300+ €205) with placeholder intermediate steps,
+all as versioned config so the real tables drop in without code changes.
+
 ## Open Questions
 
 1. **Resolved (assumption)**: `erfassungsdatum` missing/serial-0 defaults to the import

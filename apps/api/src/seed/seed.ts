@@ -14,11 +14,13 @@ import { ImportBatch } from '../entities/import-batch.entity';
 import { CommissionRule } from '../entities/commission-rule.entity';
 import { CommissionRun } from '../entities/commission-run.entity';
 import { CommissionLine } from '../entities/commission-line.entity';
+import { ConfigVersion } from '../entities/config-version.entity';
+import { ConfigKey, FACHKONZEPT_DEFAULTS } from '@blitzon/shared';
 
 const ds = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL ?? 'postgresql://blitz:blitzdev@localhost:5432/blitzonsales',
-  entities: [Organisation, SalesRep, Produkt, AppUser, Contract, AuditLog, ImportBatch, CommissionRule, CommissionRun, CommissionLine],
+  entities: [Organisation, SalesRep, Produkt, AppUser, Contract, AuditLog, ImportBatch, CommissionRule, CommissionRun, CommissionLine, ConfigVersion],
   synchronize: false,
 });
 
@@ -105,6 +107,15 @@ async function seed() {
     })
   );
   await contractRepo.save(contracts);
+
+  // Versioned business config (I-01): seed the initial valid-from version of
+  // every Fachkonzept business value so the engines can resolve them as-of a
+  // reference date instead of hardcoding.
+  const configRepo = ds.getRepository(ConfigVersion);
+  const configRows = Object.values(ConfigKey).map((key) =>
+    configRepo.create({ schluessel: key, wert: FACHKONZEPT_DEFAULTS[key], gueltigAb: '2026-01-01' }),
+  );
+  await configRepo.save(configRows);
 
   console.log('Seed complete.');
   await ds.destroy();

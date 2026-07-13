@@ -14,6 +14,7 @@ import { CommissionsModule } from './commissions/commissions.module';
 import { ImportModule } from './import/import.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DatenschutzModule } from './datenschutz/datenschutz.module';
+import { ConfigStoreModule } from './config-store/config-store.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { DatenschutzModule } from './datenschutz/datenschutz.module';
     ImportModule,
     DashboardModule,
     DatenschutzModule,
+    ConfigStoreModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
