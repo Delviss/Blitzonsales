@@ -123,7 +123,31 @@ and electricity+gas as two claims (I-19), the commercial engine incl.
 offset order (I-25) and salary-protection/storno invariants (I-18). See
 `fachkonzept-engine.spec.ts` (22 tests, all green).
 
-**Still to build (Phase 1 remainder):** persisting the engine outputs into runs,
+**Persisted Fachkonzept Provisionslauf (Phase 1 remainder, done):** the pure
+calculation core is now wired into runs. `commissions/fachkonzept/fachkonzept-run.ts`
+is a pure orchestrator (`computeFachkonzeptRun`, unit-tested in
+`fachkonzept-run.spec.ts`) that composes the engine into a full month: it counts
+qualified new private customers per rep to drive the retroactive tier (I-15, the
+40th customer recomputes the whole month), emits per-contract lines for
+new/existing/commercial contracts, routes overheads to the directly-assigned
+trainer/team-lead (I-19), splits the commercial engine into a due immediate share
+and a non-due 12-month retention with the reserve on the real SWA receipt
+(I-21/I-24), and produces a per-rep salary-protection/storno summary (I-18).
+`FachkonzeptRunService` (+ `FachkonzeptRunController` at
+`/api/provisionslaeufe/fachkonzept`) resolves the versioned config as-of the
+period end, loads the month's contracts + rep master data, persists the lines
+(`commission_line.typ` carries the category) and the summary
+(`commission_run.fachkonzept_zusammenfassung`, jsonb; `verfahren='fachkonzept'`
+distinguishes it from the legacy rule-engine run — the two coexist on the same
+tables and each refuses to touch the other's runs). Freigabe posts the rep
+negativsaldo/storno-account balance deltas and writes the append-only
+`financial_event` ledger (four-eyes enforced). Migration
+`1721001600000-FachkonzeptRun.ts` adds the two columns; the seed now carries the
+I-02/I-04 shape (client/energy/new-vs-existing, a partner org, a trainer link,
+one commercial contract) so a run has real data; the e2e suite drives the full
+create→generate→four-eyes→freigabe cycle against Postgres.
+
+**Still to build (Phase 1 remainder):**
 the Joules/SWA API client & sync (P2, I-08…I-12), the master-data admin UI (I-07),
 the Founder dashboard & drill-downs (P6), CRM/lead-time follow-up (P7),
 month-end close & the warning system (P8). The exact ch. 14.2 salary euro
@@ -165,3 +189,12 @@ all as versioned config so the real tables drop in without code changes.
 10. **Still open**: a formal retention/expiry policy for inactive Aussendienst logins (the
     DSGVO erasure endpoint exists and is manual/Admin-triggered today; no automatic
     expiry after offboarding).
+11. **Still open (persisted Fachkonzept run)**: salary protection currently only *accrues*
+    the negative balance in a low month (I-18); recovering a carried `negativsaldo` from a
+    later positive month (and whether that happens before or after the 10% storno
+    withholding) needs the ch. 14.2 figures before the first real payout, so the
+    Fachkonzept run posts advances but does not yet draw them back down. Related: rep
+    partner-vs-employee is derived from `organisation.org_typ = 'partner'`; if partner
+    status is ever per-rep rather than per-org this needs a rep-level flag. The commercial
+    12-month retention is persisted as a non-due `gewerbe_ruecklage` line but there is not
+    yet a scheduler that releases it once the holding period elapses.

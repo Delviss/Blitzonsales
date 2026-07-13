@@ -20,6 +20,14 @@ export class CommissionRun {
   @Column({ default: 'entwurf' })
   status: string;
 
+  /** 'legacy' (rule engine) vs 'fachkonzept' (I-01…I-25 calculation core). */
+  @Column({ default: 'legacy' })
+  verfahren: string;
+
+  /** Persisted per-rep salary/storno summary + reserves + totals for a Fachkonzept run. */
+  @Column({ name: 'fachkonzept_zusammenfassung', type: 'jsonb', nullable: true })
+  fachkonzeptZusammenfassung: unknown | null;
+
   @Column({ name: 'freigegeben_von', nullable: true })
   freigegebenVon: string | null;
 

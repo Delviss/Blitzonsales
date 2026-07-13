@@ -128,6 +128,50 @@ describe('BlitzON Control (e2e)', () => {
     expect(internExport.status).toBe(200);
   });
 
+  it('runs a persisted Fachkonzept Provisionslauf: create -> generate -> four-eyes approve', async () => {
+    // create + generate in one call (verfahren=fachkonzept)
+    const createRes = await request(app.getHttpServer())
+      .post('/api/provisionslaeufe/fachkonzept')
+      .set('Authorization', `Bearer ${teamleiterToken}`)
+      .send({ periode: '2026-05' });
+    expect(createRes.status).toBe(201);
+    const runId = createRes.body.run.id;
+    expect(createRes.body.run.verfahren).toBe('fachkonzept');
+    expect(createRes.body.lines.length).toBeGreaterThan(0);
+    // the persisted summary carries the per-rep salary/storno breakdown + totals
+    expect(createRes.body.summary).toBeTruthy();
+    expect(Array.isArray(createRes.body.summary.repSummaries)).toBe(true);
+    expect(createRes.body.summary.totals).toHaveProperty('faelligGesamt');
+    // seeded reps sell below the Fixum ⇒ salary protection accrues a negative balance
+    const anyProtected = createRes.body.summary.repSummaries.some((r: any) => r.negativsaldoDelta > 0);
+    expect(anyProtected).toBe(true);
+
+    // the legacy engine must refuse to touch a Fachkonzept run
+    const legacyGenerate = await request(app.getHttpServer())
+      .post(`/api/provisionslaeufe/${runId}/generate`)
+      .set('Authorization', `Bearer ${teamleiterToken}`);
+    expect(legacyGenerate.status).toBe(409);
+
+    // four-eyes: creator (teamleiter) is role-gated out; admin approves
+    const freigabe = await request(app.getHttpServer())
+      .post(`/api/provisionslaeufe/fachkonzept/${runId}/freigeben`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(freigabe.status).toBe(201);
+    expect(freigabe.body.run.status).toBe('freigegeben');
+
+    // approving again is rejected
+    const secondFreigabe = await request(app.getHttpServer())
+      .post(`/api/provisionslaeufe/fachkonzept/${runId}/freigeben`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(secondFreigabe.status).toBe(409);
+
+    // Fachkonzept runs do not leak into the legacy list
+    const legacyList = await request(app.getHttpServer())
+      .get('/api/provisionslaeufe')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(legacyList.body.every((r: any) => r.verfahren !== 'fachkonzept')).toBe(true);
+  });
+
   it('lets an admin change a commission rate without affecting already-frozen runs', async () => {
     const createRes = await request(app.getHttpServer())
       .post('/api/provisionsregeln')

@@ -26,7 +26,8 @@ export class CommissionRunsService {
   ) {}
 
   findAll(organisationId?: string) {
-    const where = organisationId ? { organisationId } : {};
+    // Only legacy rule-engine runs; Fachkonzept runs are listed via their own controller.
+    const where = organisationId ? { organisationId, verfahren: 'legacy' } : { verfahren: 'legacy' };
     return this.runRepo.find({ where, relations: ['organisation'], order: { periode: 'DESC' } });
   }
 
@@ -80,6 +81,9 @@ export class CommissionRunsService {
   async generate(runId: string, userId: string) {
     const run = await this.runRepo.findOne({ where: { id: runId } });
     if (!run) throw new NotFoundException();
+    if (run.verfahren === 'fachkonzept') {
+      throw new ConflictException('Fachkonzept-Läufe werden über /provisionslaeufe/fachkonzept berechnet.');
+    }
     if (run.status !== RunStatus.Entwurf) {
       throw new ConflictException('Nur Entwürfe können neu berechnet werden.');
     }
@@ -162,6 +166,9 @@ export class CommissionRunsService {
   async freigeben(runId: string, userId: string) {
     const run = await this.runRepo.findOne({ where: { id: runId } });
     if (!run) throw new NotFoundException();
+    if (run.verfahren === 'fachkonzept') {
+      throw new ConflictException('Fachkonzept-Läufe werden über /provisionslaeufe/fachkonzept freigegeben.');
+    }
     if (run.status === RunStatus.Freigegeben) {
       throw new ConflictException('Lauf ist bereits freigegeben.');
     }
