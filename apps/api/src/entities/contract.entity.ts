@@ -63,4 +63,80 @@ export class Contract {
   @ManyToOne(() => ImportBatch, { nullable: true })
   @JoinColumn({ name: 'import_batch_id' })
   importBatch: ImportBatch | null;
+
+  // --- I-02 · Fachkonzept ch. 4.2 / Joules ClientSchema extension ---
+
+  /** SWA order number — the single traceable key for every figure (I-03/I-28). */
+  @Column({ name: 'swa_order_number', nullable: true })
+  swaOrderNumber: string | null;
+
+  /** Private vs. commercial (Gewerbe). See ClientType. */
+  @Column({ name: 'client_type', nullable: true })
+  clientType: string | null;
+
+  /** New vs. existing customer. See StartDeliveryType. */
+  @Column({ name: 'start_delivery_type', nullable: true })
+  startDeliveryType: string | null;
+
+  /** Electricity vs. gas. See TariffEnergyType. */
+  @Column({ name: 'tariff_energy_type', nullable: true })
+  tariffEnergyType: string | null;
+
+  /** Surcharge ct/kWh — electricity. */
+  @Column({ name: 'rate_extra_profit_provision', type: 'numeric', precision: 10, scale: 4, nullable: true })
+  rateExtraProfitProvision: number | null;
+
+  /** Surcharge ct/kWh — gas. */
+  @Column({ name: 'rate_extra_profit_provision_gp', type: 'numeric', precision: 10, scale: 4, nullable: true })
+  rateExtraProfitProvisionGp: number | null;
+
+  /** Annual / total consumption (Joules previous_volume). */
+  @Column({ name: 'previous_volume', type: 'numeric', precision: 14, scale: 2, nullable: true })
+  previousVolume: number | null;
+
+  /** Pre-contract end (Vorvertrag) — drives the lead-time rule (I-31). */
+  @Column({ name: 'vorvertrag_ende', type: 'date', nullable: true })
+  vorvertragEnde: string | null;
+
+  /** Contract end — stored for existing-customer outreach (I-33). */
+  @Column({ name: 'vertrag_ende', type: 'date', nullable: true })
+  vertragEnde: string | null;
+
+  /** Term (Laufzeit) in months. */
+  @Column({ name: 'laufzeit_monate', type: 'int', nullable: true })
+  laufzeitMonate: number | null;
+
+  /** SWA total commission for the contract. */
+  @Column({ name: 'swa_gesamtprovision', type: 'numeric', precision: 12, scale: 2, nullable: true })
+  swaGesamtprovision: number | null;
+
+  /** SWA payment amount actually received. */
+  @Column({ name: 'swa_zahlbetrag', type: 'numeric', precision: 12, scale: 2, nullable: true })
+  swaZahlbetrag: number | null;
+
+  @Column({ name: 'kreditcheck_datum', type: 'date', nullable: true })
+  kreditcheckDatum: string | null;
+
+  @Column({ name: 'storno_datum', type: 'date', nullable: true })
+  stornoDatum: string | null;
+
+  /** Expected SWA commission computed by our tier engine (I-14). */
+  @Column({ name: 'erwartete_swa_provision', type: 'numeric', precision: 12, scale: 2, nullable: true })
+  erwarteteSwaProvision: number | null;
+
+  /** Actual SWA commission from the booking list (source of truth). */
+  @Column({ name: 'tatsaechliche_swa_provision', type: 'numeric', precision: 12, scale: 2, nullable: true })
+  tatsaechlicheSwaProvision: number | null;
+
+  /** Deviation expected − actual, surfaced in the plausibility control (I-14). */
+  @Column({ name: 'abweichung', type: 'numeric', precision: 12, scale: 2, nullable: true })
+  abweichung: number | null;
+
+  /** Plausibility status (ok / abweichung / offen). */
+  @Column({ name: 'plausibilitaet_status', nullable: true })
+  plausibilitaetStatus: string | null;
+
+  /** Manual override value; the original SWA value stays visible (I-36). */
+  @Column({ name: 'manueller_override', type: 'numeric', precision: 12, scale: 2, nullable: true })
+  manuellerOverride: number | null;
 }
