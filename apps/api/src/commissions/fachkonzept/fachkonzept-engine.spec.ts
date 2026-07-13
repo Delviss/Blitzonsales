@@ -2,6 +2,7 @@ import {
   ConfigKey,
   ConfigVersion,
   FACHKONZEPT_DEFAULTS,
+  PlausibilityStatus,
   RepRole,
   TariffEnergyType,
   Tier,
@@ -18,10 +19,15 @@ import {
   meetsMinimumVolume,
   OffsetTarget,
   overheadClaims,
+  plausibility,
   retroactiveMonthlyPayout,
   salaryProtection,
+  swaExpectedCommission,
+  swaTierLevel,
   tierRateForCount,
 } from './fachkonzept-engine';
+
+const SWA_TIERS = FACHKONZEPT_DEFAULTS[ConfigKey.SwaNewCustomerTier] as Tier[];
 
 const EMP_TIERS = FACHKONZEPT_DEFAULTS[ConfigKey.EmployeeTier] as Tier[];
 const PARTNER_TIERS = FACHKONZEPT_DEFAULTS[ConfigKey.PartnerTier] as Tier[];
@@ -91,6 +97,42 @@ describe('I-15/I-17 retroactive tiers (ch. 14.1)', () => {
     expect(resolveTierRate(40, PARTNER_TIERS)).toBe(120);
     expect(resolveTierRate(80, PARTNER_TIERS)).toBe(140);
     expect(resolveTierRate(120, PARTNER_TIERS)).toBe(150);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// I-14 · SWA new-customer tier + plausibility control (ch. 6.1 / 5.2)
+// ---------------------------------------------------------------------------
+describe('I-14 SWA tier + plausibility', () => {
+  it('resolves the reached SWA rate and the next threshold retroactively', () => {
+    // anchors: 0–99 €160, 100 €175, 200 €190, 300 €205
+    expect(swaExpectedCommission(50, SWA_TIERS)).toBe(160);
+    expect(swaExpectedCommission(120, SWA_TIERS)).toBe(175);
+    const level = swaTierLevel(50, SWA_TIERS);
+    expect(level.reachedRate).toBe(160);
+    expect(level.nextThreshold).toBe(100);
+    expect(level.nextRate).toBe(175);
+  });
+
+  it('reports no next threshold once at the top tier', () => {
+    const level = swaTierLevel(350, SWA_TIERS);
+    expect(level.reachedRate).toBe(205);
+    expect(level.nextThreshold).toBeNull();
+    expect(level.nextRate).toBeNull();
+  });
+
+  it('flags a deviation beyond tolerance but not cent-level rounding', () => {
+    expect(plausibility(160, 160, 1).status).toBe(PlausibilityStatus.Ok);
+    expect(plausibility(160, 159.5, 1).status).toBe(PlausibilityStatus.Ok); // within €1
+    const dev = plausibility(160, 150, 1);
+    expect(dev.status).toBe(PlausibilityStatus.Abweichung);
+    expect(dev.abweichung).toBe(10);
+  });
+
+  it('marks a missing actual SWA figure as offen', () => {
+    const r = plausibility(160, null, 1);
+    expect(r.status).toBe(PlausibilityStatus.Offen);
+    expect(r.abweichung).toBeNull();
   });
 });
 
@@ -244,5 +286,33 @@ describe('I-18 salary protection (invariants)', () => {
     expect(r.stornoWithheld).toBe(230);
     expect(r.paid).toBe(2070);
     expect(r.negativeBalanceDelta).toBe(0);
+  });
+
+  it('recovers a carried negative balance from pay above the Fixum, never breaching the floor (I-18)', () => {
+    // P=5000 ⇒ storno 500, net 4500. Above Fixum = 4500−2116 = 2384 available.
+    // carried 1000 ⇒ fully recovered; paid = 4500 − 1000 = 3500.
+    const r = salaryProtection(5000, cfg, 1000);
+    expect(r.stornoWithheld).toBe(500);
+    expect(r.negativeBalanceRecovered).toBe(1000);
+    expect(r.negativeBalanceDelta).toBe(-1000);
+    expect(r.negativeBalanceAfter).toBe(0);
+    expect(r.paid).toBe(3500);
+  });
+
+  it('caps recovery at the pay above the Fixum so the guaranteed floor still lands (I-18)', () => {
+    // P=2500 ⇒ storno 250, net 2250. Above Fixum = 2250−2116 = 134 available.
+    // carried 1000 ⇒ only 134 recovered; paid = 2250 − 134 = 2116 (the Fixum floor).
+    const r = salaryProtection(2500, cfg, 1000);
+    expect(r.negativeBalanceRecovered).toBe(134);
+    expect(r.negativeBalanceAfter).toBe(866);
+    expect(r.paid).toBe(2116);
+  });
+
+  it('does not recover in a protected (low) month; it only accrues (I-18)', () => {
+    const r = salaryProtection(1800, cfg, 500);
+    expect(r.paid).toBe(2116);
+    expect(r.negativeBalanceDelta).toBe(316);
+    expect(r.negativeBalanceRecovered).toBe(0);
+    expect(r.negativeBalanceAfter).toBe(816); // 500 carried + 316 new accrual
   });
 });

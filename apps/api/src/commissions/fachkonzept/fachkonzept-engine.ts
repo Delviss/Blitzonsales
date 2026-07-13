@@ -7,7 +7,7 @@
  * store (I-01) and pass them in. Persistence, API wiring and the SWA sync live
  * elsewhere; this module is only the maths.
  */
-import { TariffEnergyType, RepRole, Tier, resolveTierRate } from '@blitzon/shared';
+import { TariffEnergyType, RepRole, Tier, resolveTierRate, PlausibilityStatus } from '@blitzon/shared';
 
 const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -55,6 +55,71 @@ export function retroactiveMonthlyPayout(qualifiedNewCount: number, tiers: Tier[
 /** Per-contract rate at the reached tier (the retroactive rate). */
 export function tierRateForCount(qualifiedNewCount: number, tiers: Tier[]): number {
   return resolveTierRate(qualifiedNewCount, tiers);
+}
+
+// ---------------------------------------------------------------------------
+// I-14 · SWA new-customer tier expectation & plausibility control
+// ---------------------------------------------------------------------------
+
+/**
+ * The reached SWA tier level and the next threshold for a monthly new-customer
+ * count. The SWA new-customer tier applies retroactively to the *whole*
+ * qualified BlitzON new-customer volume of the billing month (electricity + gas
+ * together, existing customers excluded, commercial always counts as new), so
+ * every qualified new-customer contract of the month is expected at the same
+ * reached rate (Fachkonzept ch. 6.1, issue I-14).
+ */
+export interface SwaTierLevel {
+  count: number;
+  /** per-contract SWA commission expected at the reached tier. */
+  reachedRate: number;
+  /** count at which the next tier begins, or null if already at the top. */
+  nextThreshold: number | null;
+  /** per-contract rate at the next tier, or null if already at the top. */
+  nextRate: number | null;
+}
+
+export function swaTierLevel(monthlyQualifiedNewCount: number, tiers: Tier[]): SwaTierLevel {
+  const sorted = [...tiers].sort((a, b) => a.abCount - b.abCount);
+  const reachedRate = resolveTierRate(monthlyQualifiedNewCount, sorted);
+  const next = sorted.find((t) => t.abCount > monthlyQualifiedNewCount) ?? null;
+  return {
+    count: monthlyQualifiedNewCount,
+    reachedRate,
+    nextThreshold: next ? next.abCount : null,
+    nextRate: next ? next.satz : null,
+  };
+}
+
+/** Per-contract expected SWA commission at the reached monthly tier (I-14). */
+export function swaExpectedCommission(monthlyQualifiedNewCount: number, tiers: Tier[]): number {
+  return resolveTierRate(monthlyQualifiedNewCount, tiers);
+}
+
+export interface PlausibilityResult {
+  erwartet: number;
+  tatsaechlich: number | null;
+  abweichung: number | null;
+  status: PlausibilityStatus;
+}
+
+/**
+ * Compare the expected SWA commission with the actual one from the SWA booking
+ * list. The actual list is always the booking truth; deviations are surfaced,
+ * never silently corrected (issue I-14). A missing actual is `offen`; a
+ * deviation beyond the absolute tolerance is `abweichung`; otherwise `ok`.
+ */
+export function plausibility(
+  erwartet: number,
+  tatsaechlich: number | null,
+  toleranz: number,
+): PlausibilityResult {
+  if (tatsaechlich == null) {
+    return { erwartet: round2(erwartet), tatsaechlich: null, abweichung: null, status: PlausibilityStatus.Offen };
+  }
+  const abweichung = round2(erwartet - tatsaechlich);
+  const status = Math.abs(abweichung) > toleranz ? PlausibilityStatus.Abweichung : PlausibilityStatus.Ok;
+  return { erwartet: round2(erwartet), tatsaechlich: round2(tatsaechlich), abweichung, status };
 }
 
 // ---------------------------------------------------------------------------
@@ -325,10 +390,14 @@ export function clawbackOffset(
 // NOTE: the exact ch. 14.2 euro figures require the full Fachkonzept document
 // (the issue body is truncated in the tracker). The invariants below are the
 // unambiguous ones: two strictly separate accounts, salary protection to the
-// Fixum, and a 10% storno withholding on the positive commission. The precise
-// interaction (e.g. whether the withholding is netted before or after salary
-// protection) is flagged as an open question and must be confirmed against the
-// Fachkonzept before the first real payout.
+// Fixum, and a 10% storno withholding on the positive commission.
+//
+// Drawdown order (documented decision, see PROGRESS.md open question): in a
+// positive month the 10% storno withholding is taken first (it funds a separate
+// liability buffer), and the carried negative-commission balance is then
+// recovered only from the pay *above* the guaranteed Fixum — salary protection
+// still guarantees the employee their Fixum floor in every month. This is
+// revisited against the ch. 14.2 figures before the first real payout.
 
 export interface SalaryConfig {
   fixum: number; // €2,116
@@ -338,8 +407,16 @@ export interface SalaryConfig {
 export interface SalaryResult {
   /** Amount actually paid out to the employee this month (gross-salary basis). */
   paid: number;
-  /** Change to the negative commission balance (advance from salary protection). */
+  /**
+   * Signed change to the negative commission balance: a positive accrual in a
+   * low month (advance from salary protection), or a negative recovery in a
+   * positive month (advance drawn back down).
+   */
   negativeBalanceDelta: number;
+  /** Portion of a carried negative balance recovered this month (≥ 0). */
+  negativeBalanceRecovered: number;
+  /** The carried negative-commission balance after this month. */
+  negativeBalanceAfter: number;
   /** Amount withheld into the storno account (10% of positive commission). */
   stornoWithheld: number;
 }
@@ -348,16 +425,42 @@ export interface SalaryResult {
  * Salary protection with two strictly separate accounts (issue I-18):
  *  - variable commission P below the Fixum F ⇒ the employee is paid F and the
  *    shortfall (F − P) accrues to the *negative commission balance* (an advance
- *    recovered from later positive months).
- *  - P at or above F ⇒ 10% of P is withheld into the *storno account*; the two
- *    accounts never mix.
+ *    recovered from later positive months). A protected month never recovers.
+ *  - P at or above F ⇒ 10% of P is withheld into the *storno account*, then any
+ *    carried negative balance is recovered from the net pay above the Fixum
+ *    (the floor F is always paid). The two accounts never mix.
+ *
+ * @param carriedNegativeBalance the rep's negative-commission balance brought
+ *   into this month (defaults to 0 for callers that only need the single-month
+ *   accrual/withholding, e.g. the pure worked-example tests).
  */
-export function salaryProtection(variableCommission: number, cfg: SalaryConfig): SalaryResult {
-  const P = variableCommission;
+export function salaryProtection(
+  variableCommission: number,
+  cfg: SalaryConfig,
+  carriedNegativeBalance = 0,
+): SalaryResult {
+  const P = round2(variableCommission);
   const F = cfg.fixum;
+  const carried = Math.max(0, round2(carriedNegativeBalance));
   if (P < F) {
-    return { paid: round2(F), negativeBalanceDelta: round2(F - P), stornoWithheld: 0 };
+    const accrual = round2(F - P);
+    return {
+      paid: round2(F),
+      negativeBalanceDelta: accrual,
+      negativeBalanceRecovered: 0,
+      negativeBalanceAfter: round2(carried + accrual),
+      stornoWithheld: 0,
+    };
   }
   const stornoWithheld = round2(P * cfg.stornoRate);
-  return { paid: round2(P - stornoWithheld), negativeBalanceDelta: 0, stornoWithheld };
+  const netCommission = round2(P - stornoWithheld);
+  const aboveFixum = Math.max(0, round2(netCommission - F));
+  const recovered = round2(Math.min(carried, aboveFixum));
+  return {
+    paid: round2(netCommission - recovered),
+    negativeBalanceDelta: round2(-recovered),
+    negativeBalanceRecovered: recovered,
+    negativeBalanceAfter: round2(carried - recovered),
+    stornoWithheld,
+  };
 }

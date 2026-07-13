@@ -15,6 +15,7 @@
  */
 import {
   ClientType,
+  PlausibilityStatus,
   StartDeliveryType,
   TariffEnergyType,
   Tier,
@@ -26,7 +27,9 @@ import {
   existingCustomerCompensation,
   meetsMinimumVolume,
   overheadClaims,
+  plausibility,
   salaryProtection,
+  swaTierLevel,
   tierRateForCount,
 } from './fachkonzept-engine';
 
@@ -43,6 +46,10 @@ export interface FachkonzeptRunConfig {
   minConsumptionGas: number;
   employeeTier: Tier[];
   partnerTier: Tier[];
+  /** SWA new-customer tier (I-14): drives the expected SWA commission. */
+  swaNewCustomerTier: Tier[];
+  /** absolute € tolerance for the plausibility control (I-14). */
+  plausibilityToleranceAbs: number;
   fixum: number;
   employerCostRate: number;
   overheadTrainerNew: number;
@@ -90,6 +97,8 @@ export interface RunContract {
   surchargeCt: number | null;
   /** SWA revenue actually received (feeds the commercial reserve, I-24). */
   swaRevenue: number | null;
+  /** actual SWA commission from the booking list — the plausibility truth (I-14). */
+  actualSwaProvision: number | null;
   /** commercial SWA half confirmations (no prepayment, I-21). */
   kreditcheckConfirmed: boolean;
   lieferbeginnConfirmed: boolean;
@@ -135,12 +144,49 @@ export interface RepSummary {
   tierRate: number;
   /** gross variable commission due this month (own lines + overheads earned). */
   variableProvision: number;
-  /** paid out after salary protection / storno withholding. */
+  /** paid out after salary protection / storno withholding / negative-balance recovery. */
   auszahlung: number;
-  /** advance added to the negative-commission balance (employee only, I-18). */
+  /** signed change to the negative-commission balance (+accrual / −recovery, I-18). */
   negativsaldoDelta: number;
+  /** portion of the carried negative balance recovered this month (I-18). */
+  negativsaldoRecovered: number;
+  /** the rep's negative-commission balance after this run (I-18). */
+  negativsaldoAfter: number;
   /** 10% withheld into the storno account (employee only, I-18). */
   stornoEinbehalt: number;
+  /** storno withholding attributed to private commission (I-23 ch. 10.1). */
+  stornoEinbehaltPrivat: number;
+  /** storno withholding attributed to commercial commission (I-23 ch. 10.1). */
+  stornoEinbehaltGewerbe: number;
+}
+
+/**
+ * Expected-vs-actual SWA commission for one contract in the billing month
+ * (I-14). Existing customers and unqualified new contracts are excluded from the
+ * SWA tier and get no plausibility row.
+ */
+export interface PlausibilitySummary {
+  contractId: string;
+  kategorie: 'neukunde' | 'gewerbe';
+  erwartet: number;
+  tatsaechlich: number | null;
+  abweichung: number | null;
+  status: PlausibilityStatus;
+}
+
+/** Monthly SWA new-customer tier + plausibility roll-up (I-14). */
+export interface SwaTierSummary {
+  /** company-wide qualified new-customer volume feeding the SWA tier (new private + all commercial). */
+  qualifizierteNeukunden: number;
+  /** per-contract rate at the reached tier. */
+  erreichteStufe: number;
+  naechsteStufeAb: number | null;
+  naechsteStufeSatz: number | null;
+  erwartetGesamt: number;
+  tatsaechlichGesamt: number;
+  abweichungGesamt: number;
+  anzahlAbweichung: number;
+  anzahlOffen: number;
 }
 
 export interface ReserveSummary {
@@ -156,6 +202,10 @@ export interface FachkonzeptRunResult {
   lines: RunLine[];
   repSummaries: RepSummary[];
   reserves: ReserveSummary[];
+  /** per-contract expected-vs-actual SWA commission (I-14). */
+  plausibilities: PlausibilitySummary[];
+  /** monthly SWA new-customer tier + plausibility roll-up (I-14). */
+  swaTier: SwaTierSummary;
   /** run-level totals for quick display / reconciliation. */
   totals: {
     faelligGesamt: number;
@@ -182,33 +232,56 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
   const repById = new Map(reps.map((r) => [r.id, r]));
   const lines: RunLine[] = [];
   const reserves: ReserveSummary[] = [];
+  const plausibilities: PlausibilitySummary[] = [];
   const warnungen: string[] = [];
 
-  // Per-rep gross variable commission accumulator (own income + overheads earned).
+  // Per-rep gross variable commission accumulator (own income + overheads earned)
+  // and the subset that stems from commercial contracts (for the storno split, I-23).
   const variableByRep = new Map<string, number>();
-  const addVariable = (repId: string | null, amount: number) => {
+  const variableGewerbeByRep = new Map<string, number>();
+  const addVariable = (repId: string | null, amount: number, gewerbe = false) => {
     if (!repId || amount === 0) return;
     variableByRep.set(repId, round2((variableByRep.get(repId) ?? 0) + amount));
+    if (gewerbe) variableGewerbeByRep.set(repId, round2((variableGewerbeByRep.get(repId) ?? 0) + amount));
   };
 
-  // --- Pass 1: count qualified new private customers per rep (drives the tier) -
-  const qualifiedNewByRep = new Map<string, number>();
   const isQualifyingStatus = (s: string) => c.qualifyingStatuses.includes(s);
   const isNewPrivate = (ct: RunContract) =>
     asEnum(ct.clientType) === ClientType.Privat &&
     asEnum(ct.startDeliveryType) === StartDeliveryType.Neukunde;
+  const isCommercial = (ct: RunContract) => asEnum(ct.clientType) === ClientType.Gewerbe;
   const meetsMin = (ct: RunContract) =>
     meetsMinimumVolume(asEnum(ct.energie) as TariffEnergyType, ct.verbrauch, {
       strom: c.minConsumptionStrom,
       gas: c.minConsumptionGas,
     });
+  const newPrivateQualifies = (ct: RunContract) =>
+    isNewPrivate(ct) && isQualifyingStatus(ct.status) && meetsMin(ct);
 
+  // --- Pass 1: two counts -----------------------------------------------------
+  //  · per-rep qualified new private customers → the employee/partner tier (I-15)
+  //  · company-wide qualified new-customer volume → the SWA tier (I-14): every
+  //    qualified new private contract plus every commercial contract (commercial
+  //    always counts as new; existing customers are excluded).
+  const qualifiedNewByRep = new Map<string, number>();
+  let swaQualifiedNewCount = 0;
   for (const ct of contracts) {
-    if (!ct.repId) continue;
-    if (isNewPrivate(ct) && isQualifyingStatus(ct.status) && meetsMin(ct)) {
+    if (ct.repId && newPrivateQualifies(ct)) {
       qualifiedNewByRep.set(ct.repId, (qualifiedNewByRep.get(ct.repId) ?? 0) + 1);
     }
+    if (newPrivateQualifies(ct) || isCommercial(ct)) swaQualifiedNewCount += 1;
   }
+  const swaExpectedPerNewCustomer = tierRateForCount(swaQualifiedNewCount, c.swaNewCustomerTier);
+
+  const addPlausibility = (
+    contractId: string,
+    kategorie: 'neukunde' | 'gewerbe',
+    erwartet: number,
+    tatsaechlich: number | null,
+  ) => {
+    const p = plausibility(erwartet, tatsaechlich, c.plausibilityToleranceAbs);
+    plausibilities.push({ contractId, kategorie, ...p });
+  };
 
   // --- Pass 2: build every line ---------------------------------------------
   for (const ct of contracts) {
@@ -285,7 +358,11 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
           `Gewerbe Sofortanteil: bestätigt ${Math.round(confirmedFraction * 100)}% von € ${total.totalCommission.toFixed(2)}` +
           (total.surchargeCapped ? ' · Aufschlag über Obergrenze' : ''),
       });
-      addVariable(ct.repId, shares.immediate);
+      addVariable(ct.repId, shares.immediate, true);
+      // I-14: commercial counts as new for the SWA tier count, but its expected
+      // SWA commission is the commercial engine total (consumption × surcharge),
+      // not the flat per-customer tier rate.
+      addPlausibility(ct.id, 'gewerbe', total.totalCommission, ct.actualSwaProvision);
       lines.push({
         contractId: ct.id,
         repId: ct.repId,
@@ -367,12 +444,24 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
       begruendung: `Neukunde, Staffel bei ${count} qualifizierten Neukunden ⇒ € ${rate}/Vertrag`,
     });
     addVariable(ct.repId, rate);
+    // I-14: expected SWA commission at the company-wide new-customer tier.
+    addPlausibility(ct.id, 'neukunde', swaExpectedPerNewCustomer, ct.actualSwaProvision);
     emitOverheads();
   }
 
   // --- Pass 3: per-rep salary protection & storno withholding (I-18) --------
   const repSummaries: RepSummary[] = [];
   const involvedRepIds = new Set<string>([...variableByRep.keys(), ...qualifiedNewByRep.keys()]);
+  // Attribute the storno withholding to private vs commercial commission for the
+  // ch. 10.1 storno-account breakdown (I-23), proportional to their share of the
+  // rep's variable commission.
+  const splitStorno = (repId: string, stornoWithheld: number): { privat: number; gewerbe: number } => {
+    const total = variableByRep.get(repId) ?? 0;
+    if (stornoWithheld <= 0 || total <= 0) return { privat: 0, gewerbe: 0 };
+    const gewerbeBase = variableGewerbeByRep.get(repId) ?? 0;
+    const gewerbe = round2(stornoWithheld * (gewerbeBase / total));
+    return { privat: round2(stornoWithheld - gewerbe), gewerbe };
+  };
   for (const repId of involvedRepIds) {
     const rep = repById.get(repId);
     const isPartner = rep?.isPartner ?? false;
@@ -390,11 +479,17 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
         variableProvision: variable,
         auszahlung: variable,
         negativsaldoDelta: 0,
+        negativsaldoRecovered: 0,
+        negativsaldoAfter: 0,
         stornoEinbehalt: 0,
+        stornoEinbehaltPrivat: 0,
+        stornoEinbehaltGewerbe: 0,
       });
       continue;
     }
-    const salary = salaryProtection(variable, { fixum: c.fixum, stornoRate: c.stornoAccountRate });
+    const carried = Number(rep?.negativsaldo ?? 0);
+    const salary = salaryProtection(variable, { fixum: c.fixum, stornoRate: c.stornoAccountRate }, carried);
+    const storno = splitStorno(repId, salary.stornoWithheld);
     repSummaries.push({
       repId,
       isPartner,
@@ -403,10 +498,32 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
       variableProvision: variable,
       auszahlung: salary.paid,
       negativsaldoDelta: salary.negativeBalanceDelta,
+      negativsaldoRecovered: salary.negativeBalanceRecovered,
+      negativsaldoAfter: salary.negativeBalanceAfter,
       stornoEinbehalt: salary.stornoWithheld,
+      stornoEinbehaltPrivat: storno.privat,
+      stornoEinbehaltGewerbe: storno.gewerbe,
     });
   }
   repSummaries.sort((a, b) => a.repId.localeCompare(b.repId));
+
+  // --- SWA new-customer tier + plausibility roll-up (I-14) ------------------
+  const level = swaTierLevel(swaQualifiedNewCount, c.swaNewCustomerTier);
+  const withActual = plausibilities.filter((p) => p.tatsaechlich != null);
+  const swaTier: SwaTierSummary = {
+    qualifizierteNeukunden: swaQualifiedNewCount,
+    erreichteStufe: level.reachedRate,
+    naechsteStufeAb: level.nextThreshold,
+    naechsteStufeSatz: level.nextRate,
+    erwartetGesamt: round2(plausibilities.reduce((s, p) => s + p.erwartet, 0)),
+    tatsaechlichGesamt: round2(withActual.reduce((s, p) => s + (p.tatsaechlich ?? 0), 0)),
+    abweichungGesamt: round2(withActual.reduce((s, p) => s + (p.abweichung ?? 0), 0)),
+    anzahlAbweichung: plausibilities.filter((p) => p.status === PlausibilityStatus.Abweichung).length,
+    anzahlOffen: plausibilities.filter((p) => p.status === PlausibilityStatus.Offen).length,
+  };
+  if (swaTier.anzahlAbweichung > 0) {
+    warnungen.push(`${swaTier.anzahlAbweichung} Vertrag/Verträge mit SWA-Abweichung (Plausibilitätskontrolle, I-14).`);
+  }
 
   // --- Totals ---------------------------------------------------------------
   const faelligGesamt = round2(lines.filter((l) => l.faellig).reduce((s, l) => s + l.betrag, 0));
@@ -420,6 +537,8 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
     lines,
     repSummaries,
     reserves,
+    plausibilities,
+    swaTier,
     totals: { faelligGesamt, rueckstellungGesamt, stornoEinbehaltGesamt, reserveTargetGesamt, anzahlDatencheck },
     warnungen,
   };

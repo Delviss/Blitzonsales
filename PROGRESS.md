@@ -211,6 +211,92 @@ in Phase 1**: its default is `null`, `seedDefaults`/seed skip null-valued keys,
 so the key is resolvable (returns `null`) without assuming any number. Distinct
 from the pre-existing `lead_time_days` (I-31 Vorvertrag rule).
 
+## Wave 2 (Calculation stack) — I-14 / I-18 / I-24 / I-25 / I-23 / I-07
+
+Turns the engine output into persisted posting objects and completes the tier /
+salary layers. All shipped with migrations, unit + service + e2e coverage.
+
+**I-14 SWA new-customer tier + plausibility control (#35, ch. 6.1/5.2):** the
+SWA new-customer tier (`ConfigKey.SwaNewCustomerTier`, anchors 0–99 €160 …
+300+ €205) is now applied on the **billing month's whole qualified
+new-customer volume, company-wide** — every qualified new private contract plus
+every commercial contract (commercial always counts as new; existing customers
+excluded) — via `swaTierLevel`/`swaExpectedCommission` (pure,
+`fachkonzept-engine.ts`). `computeFachkonzeptRun` emits a per-contract
+`plausibility` row (expected vs. actual SWA commission, deviation, status
+`ok`/`abweichung`/`offen` against `ConfigKey.PlausibilityToleranceAbs`, default
+€1) and a monthly `swaTier` roll-up (reached level, next threshold, totals,
+counts). A commercial contract's *expected* SWA is its engine total (kWh ×
+surcharge), not the flat tier rate, but it still increments the tier count.
+`FachkonzeptRunService.generate` writes the comparison back onto each contract
+(`erwartete_swa_provision`, `tatsaechliche_swa_provision`, `abweichung`,
+`plausibilitaet_status`) — the actual SWA list stays the booking truth, only the
+comparison is recorded — and persists `plausibilities`/`swaTier` in the run
+summary.
+
+**I-18 salary drawdown completion (#39, ch. 7.3):** `salaryProtection` now takes
+the carried negative-commission balance and, in a positive month, *recovers* it
+(previously it only accrued in a low month). Documented order (see open
+question 11, now resolved): 10% storno withholding first (funds the separate
+liability buffer), then the carried balance is drawn down from net pay **above
+the guaranteed Fixum**, so salary protection still guarantees the Fixum floor
+every month. The run reads each rep's `negativsaldo`, and freigabe posts the
+signed delta (`negativsaldo_vorschuss` accrual / `negativsaldo_tilgung`
+recovery) to the ledger and the rep balance.
+
+**I-23 employee storno accounts (#44, ch. 10.1):** `sales_rep` gains four
+cumulative running totals (`storno_privat_einbehalt`, `storno_gewerbe_einbehalt`,
+`storno_clawback_genutzt`, `storno_freigegeben`) so the storno account is a real
+posting object. The run now splits the 10% withholding into a private and a
+commercial reserved share (proportional to the rep's private vs. commercial
+commission) and freigabe posts them via `StornoAccountService.applyWithholding`.
+`GET /api/storno-konten` (+ `/total`) exposes every ch. 10.1 field per employee
+and in total — gesamtsaldo, privat/gewerbe reserved share, used clawbacks,
+manually released, open receivables and freely-available (= balance − open
+receivables). Founder may release part of an account
+(`POST :repId/freigeben`, audited, ledger `storno_freigabe`).
+
+**I-24 commercial reserve posting object (#45, ch. 10.2/10.3):** the 20% reserve
+is now a persisted `commercial_reserve` posting object (per contract + run, rolls
+up to a total), booked on freigabe from the real SWA receipt as
+non-freely-available liquidity, in addition to the append-only ledger entry.
+`GET /api/gewerbe-ruecklagen(/summary)` shows per-contract reserves and the total
+with the **under-funding flag** (`reserve_actual < reserve_target` ⇒ `unterdeckt`);
+Founder may correct the funded amount (`POST :id/ist`) and **release** a reserve
+after contract end / final billing (`POST :id/freigeben`, ledger
+`ruecklage_gewerbe_freigabe`).
+
+**I-25 clawback receivable + offset ledger (#46, ch. 9.4/7.5):** SWA clawbacks
+become persisted `clawback_receivable` posting objects. `ClawbackService.create`
+computes the causer-accurate pass-through (`clawbackOffset`, pure) and offsets in
+the fixed order — (1) storno account, (2) current commission, (3) open retention
+commission — drawing the storno-account portion out of the account (I-23). Steps
+(4) invoice to a departed employee and (5) collections are the disposition of any
+remaining balance, tracked as the receivable's collections status
+(`ausgeglichen`/`offen`/`rechnung`/`inkasso`); the remaining balance is always
+reconstructable (`passThrough = Σ offsets + remaining`). `POST/GET /api/clawbacks`
+(Founder/Backoffice create + record invoice/payment/escalation; read-only view).
+
+**I-07 master-data admin UI (#28, ch. 4.1/12.1):** the Verwaltung screens now
+edit every I-04 field. `VerkaeuferPage` maintains role, base salary (Fixum
+basis), active status, directly-assigned trainer/team-lead (I-19), join/leave
+dates and IBAN; `OrganisationenPage` maintains organisation type and, for partner
+orgs, the partner compensation model; a new `StatusMasterPage`
+(`/verwaltung/statusstammdaten`) releases valid-from-versioned status master
+entries and seeds the defaults (I-06). All mutations are Founder/Admin only and
+audited server-side (the existing `PUT`/`POST` master-data endpoints already
+accept the new fields).
+
+Migration `1721606400000-PostingObjects.ts` adds `commercial_reserve`,
+`clawback_receivable` and the four `sales_rep` storno-breakdown columns
+(`apps/api/src/posting-objects/`, a dedicated module wired into `CommissionsModule`
+so freigabe can persist the objects). New pure functions carry worked-example
+tests (`fachkonzept-engine.spec.ts`); the run orchestrator gains SWA-tier,
+drawdown and storno-split tests (`fachkonzept-run.spec.ts`); the offset order and
+storno-account math are unit-tested with mocked repos
+(`test/posting-objects.service.spec.ts`); the e2e suite drives the storno/reserve
+posting objects on freigabe and a full clawback offset cycle.
+
 ## Open Questions
 
 1. **Resolved (assumption)**: `erfassungsdatum` missing/serial-0 defaults to the import
@@ -243,12 +329,21 @@ from the pre-existing `lead_time_days` (I-31 Vorvertrag rule).
 10. **Still open**: a formal retention/expiry policy for inactive Aussendienst logins (the
     DSGVO erasure endpoint exists and is manual/Admin-triggered today; no automatic
     expiry after offboarding).
-11. **Still open (persisted Fachkonzept run)**: salary protection currently only *accrues*
-    the negative balance in a low month (I-18); recovering a carried `negativsaldo` from a
-    later positive month (and whether that happens before or after the 10% storno
-    withholding) needs the ch. 14.2 figures before the first real payout, so the
-    Fachkonzept run posts advances but does not yet draw them back down. Related: rep
-    partner-vs-employee is derived from `organisation.org_typ = 'partner'`; if partner
-    status is ever per-rep rather than per-org this needs a rep-level flag. The commercial
-    12-month retention is persisted as a non-due `gewerbe_ruecklage` line but there is not
-    yet a scheduler that releases it once the holding period elapses.
+11. **Resolved in Wave 2 (assumption, pending ch. 14.2 confirmation)**: salary drawdown is
+    now implemented (I-18) — a carried `negativsaldo` is recovered from a later positive
+    month. The order was decided as: 10% storno withholding **first** (separate liability
+    buffer), then recovery from net pay **above the Fixum** so the Fixum floor is never
+    breached. The exact ch. 14.2 euro figures/interaction should still be confirmed against
+    the Fachkonzept before the first real payout; the invariants (two separate accounts,
+    guaranteed floor, no mixing) are the certain part.
+12. **Still open**: rep partner-vs-employee is derived from `organisation.org_typ =
+    'partner'`; if partner status is ever per-rep rather than per-org this needs a rep-level
+    flag. The commercial 12-month retention is persisted as a non-due `gewerbe_ruecklage`
+    line and the reserve as a `commercial_reserve` posting object, but there is not yet a
+    scheduler that releases either once the holding period / contract end elapses (release
+    is a manual Founder action today: `POST /api/gewerbe-ruecklagen/:id/freigeben`).
+13. **Still open (I-14)**: the SWA plausibility "actual" is read from
+    `tatsaechliche_swa_provision` (falling back to `swa_gesamtprovision`); until the Joules/SWA
+    booking-list sync exists (P2), that actual must be imported/entered manually, so most
+    contracts show `offen` rather than `ok`/`abweichung` on a fresh run. The intermediate SWA
+    tier steps between the documented anchors remain placeholders (versioned config).

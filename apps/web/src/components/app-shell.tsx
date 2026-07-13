@@ -9,6 +9,7 @@ import {
   LogOut,
   Minimize2,
   Moon,
+  ListChecks,
   Package,
   RotateCw,
   ScrollText,
@@ -163,6 +164,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/verwaltung/organisationen', label: 'Organisationen', icon: Building2, roles: PHASE1_READ },
       { to: '/verwaltung/verkaeufer', label: 'Verkäufer', icon: Users, roles: PHASE1_READ },
       { to: '/verwaltung/produkte', label: 'Produkte', icon: Package, roles: PHASE1_READ },
+      { to: '/verwaltung/statusstammdaten', label: 'Statusstammdaten', icon: ListChecks, roles: PHASE1_READ },
     ],
   },
   {

@@ -17,6 +17,8 @@ function defaultConfig(): FachkonzeptRunConfig {
     minConsumptionGas: d[ConfigKey.MinConsumptionGas] as number,
     employeeTier: d[ConfigKey.EmployeeTier] as Tier[],
     partnerTier: d[ConfigKey.PartnerTier] as Tier[],
+    swaNewCustomerTier: d[ConfigKey.SwaNewCustomerTier] as Tier[],
+    plausibilityToleranceAbs: d[ConfigKey.PlausibilityToleranceAbs] as number,
     fixum: d[ConfigKey.Fixum] as number,
     employerCostRate: d[ConfigKey.EmployerCostRate] as number,
     overheadTrainerNew: d[ConfigKey.OverheadTrainerNew] as number,
@@ -48,6 +50,7 @@ const baseContract = (over: Partial<RunContract>): RunContract => ({
   gesamtverbrauch: null,
   surchargeCt: null,
   swaRevenue: null,
+  actualSwaProvision: null,
   kreditcheckConfirmed: false,
   lieferbeginnConfirmed: false,
   ...over,
@@ -216,6 +219,109 @@ describe('computeFachkonzeptRun', () => {
     expect(sofort.datencheck).toBe(true);
     expect(res.warnungen.length).toBeGreaterThan(0);
     expect(sofort.betrag).toBe(1250); // 100000 × 5 ct = 5000 → 25%
+  });
+
+  it('computes the SWA tier company-wide and reports per-contract deviations (I-14)', () => {
+    const res = computeFachkonzeptRun({
+      periode: '2026-06',
+      config: defaultConfig(),
+      reps: [emp('A')],
+      contracts: [
+        // actual €160 matches the reached tier ⇒ ok
+        baseContract({ id: 'c1', repId: 'A', actualSwaProvision: 160 }),
+        // actual €120 deviates from the €160 tier ⇒ abweichung
+        baseContract({ id: 'c2', repId: 'A', actualSwaProvision: 120 }),
+        // no actual yet ⇒ offen
+        baseContract({ id: 'c3', repId: 'A', actualSwaProvision: null }),
+      ],
+    });
+    expect(res.swaTier.qualifizierteNeukunden).toBe(3);
+    expect(res.swaTier.erreichteStufe).toBe(160); // 0–99 anchor
+    expect(res.swaTier.naechsteStufeAb).toBe(100);
+    expect(res.plausibilities).toHaveLength(3);
+    const byId = Object.fromEntries(res.plausibilities.map((p) => [p.contractId, p]));
+    expect(byId.c1.status).toBe('ok');
+    expect(byId.c2.status).toBe('abweichung');
+    expect(byId.c2.abweichung).toBe(40);
+    expect(byId.c3.status).toBe('offen');
+    expect(res.swaTier.anzahlAbweichung).toBe(1);
+    expect(res.swaTier.anzahlOffen).toBe(1);
+  });
+
+  it('counts commercial contracts into the SWA new-customer tier (I-14)', () => {
+    const contracts = [
+      ...Array.from({ length: 99 }, (_, i) => baseContract({ id: `n${i}`, repId: 'A' })),
+      baseContract({
+        id: 'g1', repId: 'A', clientType: ClientType.Gewerbe,
+        gesamtverbrauch: 10000, surchargeCt: 3, kreditcheckConfirmed: true, lieferbeginnConfirmed: true,
+      }),
+    ];
+    const res = computeFachkonzeptRun({ periode: '2026-06', config: defaultConfig(), reps: [emp('A')], contracts });
+    // 99 private + 1 commercial = 100 ⇒ crosses into the €175 SWA tier.
+    expect(res.swaTier.qualifizierteNeukunden).toBe(100);
+    expect(res.swaTier.erreichteStufe).toBe(175);
+    // the commercial contract's expected SWA is its engine total, not the flat tier rate.
+    const g = res.plausibilities.find((p) => p.contractId === 'g1')!;
+    expect(g.kategorie).toBe('gewerbe');
+    expect(g.erwartet).toBe(300); // 10000 × 3 ct
+  });
+
+  it('recovers a carried negativsaldo from a later positive month (I-18)', () => {
+    // 40 qualified new ⇒ €90 each ⇒ €3600 variable, storno 360, net 3240.
+    // above Fixum = 3240 − 2116 = 1124 available to draw down a carried €800.
+    const contracts = Array.from({ length: 40 }, (_, i) => baseContract({ id: `c${i}`, repId: 'A' }));
+    const res = computeFachkonzeptRun({
+      periode: '2026-06',
+      config: defaultConfig(),
+      reps: [emp('A', { negativsaldo: 800 })],
+      contracts,
+    });
+    const a = res.repSummaries.find((r) => r.repId === 'A')!;
+    expect(a.stornoEinbehalt).toBe(360);
+    expect(a.negativsaldoRecovered).toBe(800);
+    expect(a.negativsaldoDelta).toBe(-800);
+    expect(a.negativsaldoAfter).toBe(0);
+    expect(a.auszahlung).toBe(3240 - 800);
+  });
+
+  it('splits the storno withholding into private and commercial reserved shares (I-23)', () => {
+    // one private new (€90 after tier? no — 1 new ⇒ €70) + one commercial immediate.
+    const res = computeFachkonzeptRun({
+      periode: '2026-06',
+      config: defaultConfig(),
+      reps: [emp('A')],
+      contracts: [
+        baseContract({ id: 'c1', repId: 'A' }), // €70 private
+        baseContract({
+          id: 'g1', repId: 'A', clientType: ClientType.Gewerbe,
+          gesamtverbrauch: 120000, surchargeCt: 4, kreditcheckConfirmed: true, lieferbeginnConfirmed: true,
+        }), // €1200 commercial immediate
+      ],
+    });
+    const a = res.repSummaries.find((r) => r.repId === 'A')!;
+    // variable = 70 + 1200 = 1270 (< Fixum) ⇒ no storno withholding this month.
+    expect(a.variableProvision).toBe(1270);
+    expect(a.stornoEinbehalt).toBe(0);
+    expect(a.stornoEinbehaltPrivat).toBe(0);
+    expect(a.stornoEinbehaltGewerbe).toBe(0);
+  });
+
+  it('attributes the storno split proportionally in a positive month (I-23)', () => {
+    // 40 private new (€90 each = €3600) + one commercial immediate (€1200) = €4800 var.
+    const contracts = [
+      ...Array.from({ length: 40 }, (_, i) => baseContract({ id: `c${i}`, repId: 'A' })),
+      baseContract({
+        id: 'g1', repId: 'A', clientType: ClientType.Gewerbe,
+        gesamtverbrauch: 120000, surchargeCt: 4, kreditcheckConfirmed: true, lieferbeginnConfirmed: true,
+      }),
+    ];
+    const res = computeFachkonzeptRun({ periode: '2026-06', config: defaultConfig(), reps: [emp('A')], contracts });
+    const a = res.repSummaries.find((r) => r.repId === 'A')!;
+    expect(a.variableProvision).toBe(4800);
+    expect(a.stornoEinbehalt).toBe(480); // 10% of 4800
+    // gewerbe share = 480 × 1200/4800 = 120 ; private = 360.
+    expect(a.stornoEinbehaltGewerbe).toBe(120);
+    expect(a.stornoEinbehaltPrivat).toBe(360);
   });
 
   it('pays partners raw (partner tiers, no Fixum, no storno withholding)', () => {
