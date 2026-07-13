@@ -85,6 +85,13 @@ describe('mapRow', () => {
     expect(row.verbrauch).toBe(1500);
     expect(row.kunde).toBeNull();
   });
+
+  it('maps delivery start and contract end for every contract (I-33)', () => {
+    const headerMap = buildHeaderMap(['Joules-ID', 'Lieferbeginn', 'Vertragsende']);
+    const row = mapRow({ 'Joules-ID': 'J-2', Lieferbeginn: '01.01.2026', Vertragsende: '31.12.2027' }, headerMap);
+    expect(row.lieferbeginn).toBe('2026-01-01');
+    expect(row.vertragEnde).toBe('2027-12-31');
+  });
 });
 
 describe('normalizeName', () => {

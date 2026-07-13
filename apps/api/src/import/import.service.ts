@@ -106,6 +106,8 @@ export class ImportService {
         // erfassungsdatum missing/serial-0 defaults to the import timestamp (see PROGRESS.md open question)
         erfassungsdatum: row.erfassungsdatum ?? existing?.erfassungsdatum ?? importTimestamp,
         lieferbeginn: row.lieferbeginn ?? existing?.lieferbeginn ?? null,
+        // I-33: delivery start (above) and contract end are stored for every contract.
+        vertragEnde: row.vertragEnde ?? existing?.vertragEnde ?? null,
         status: resolveStatus(row.status),
         importBatchId: batch.id,
       };

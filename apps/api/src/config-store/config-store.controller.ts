@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Query, UseGuards, Request } from '@nestjs/common';
-import { Rolle } from '@blitzon/shared';
+import { PHASE1_READ_ROLLEN, Rolle } from '@blitzon/shared';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
 import { RolesGuard } from '../common/roles.guard';
 import { Roles } from '../common/roles.decorator';
@@ -18,7 +18,7 @@ export class ConfigStoreController {
     private readonly audit: AuditService,
   ) {}
 
-  @Roles(Rolle.AdminGf, Rolle.Backoffice)
+  @Roles(...PHASE1_READ_ROLLEN)
   @Get()
   resolveAll(@Query('asOf') asOf?: string) {
     return this.svc.resolveAll(asOf ?? new Date().toISOString().slice(0, 10));

@@ -122,10 +122,19 @@ function ThemeToggle({ className }: { className?: string }) {
 
 const rollenLabels: Record<string, string> = {
   admin_gf: 'Admin / GF',
-  teamleiter: 'Teamleiter',
   backoffice: 'Backoffice',
-  aussendienst: 'Außendienst',
+  readonly: 'Nur Lesen',
+  // Reserved portal roles (no Phase-1 UI) — labelled for the user menu only.
+  aussendienst: 'Außendienst (Portal)',
+  partner: 'Partner (Portal)',
+  teamleiter: 'Teamleiter (Legacy)',
 };
+
+// I-05: Phase 1 is a Founder/Backoffice tool. Read surfaces are visible to
+// Founder/Backoffice/read-only; operational surfaces exclude read-only. Portal
+// roles reach no Phase-1 nav item.
+const PHASE1_READ = ['admin_gf', 'backoffice', 'readonly'];
+const PHASE1_OPS = ['admin_gf', 'backoffice'];
 
 interface NavItem {
   to: string;
@@ -143,17 +152,17 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Vertrieb',
     items: [
-      { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
-      { to: '/provisionslaeufe', label: 'Provisionsläufe', icon: Wallet, roles: ['admin_gf', 'teamleiter', 'backoffice'] },
-      { to: '/import', label: 'Import', icon: Upload, roles: ['admin_gf', 'teamleiter', 'backoffice'] },
+      { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, roles: PHASE1_READ },
+      { to: '/provisionslaeufe', label: 'Provisionsläufe', icon: Wallet, roles: PHASE1_READ },
+      { to: '/import', label: 'Import', icon: Upload, roles: PHASE1_OPS },
     ],
   },
   {
     label: 'Stammdaten',
     items: [
-      { to: '/verwaltung/organisationen', label: 'Organisationen', icon: Building2 },
-      { to: '/verwaltung/verkaeufer', label: 'Verkäufer', icon: Users, roles: ['admin_gf', 'teamleiter', 'backoffice'] },
-      { to: '/verwaltung/produkte', label: 'Produkte', icon: Package },
+      { to: '/verwaltung/organisationen', label: 'Organisationen', icon: Building2, roles: PHASE1_READ },
+      { to: '/verwaltung/verkaeufer', label: 'Verkäufer', icon: Users, roles: PHASE1_READ },
+      { to: '/verwaltung/produkte', label: 'Produkte', icon: Package, roles: PHASE1_READ },
     ],
   },
   {

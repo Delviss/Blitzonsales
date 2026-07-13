@@ -157,6 +157,60 @@ function is implemented to the certain invariants and the SWA tier keeps only it
 documented anchors (0–99 €160 … 300+ €205) with placeholder intermediate steps,
 all as versioned config so the real tables drop in without code changes.
 
+## Wave 1 (Foundation completion) — I-05 / I-06 / I-33
+
+Lowest-level prerequisites that later waves read from. All three shipped with
+migrations, seed data, unit + e2e coverage.
+
+**I-06 Status master data (#27, Fachkonzept ch. 5.1/4.1):** a dedicated
+`status_master` table (`apps/api/src/status-master/`) replaces the old
+`qualifying_statuses` *config* value as the single source of truth for which
+contract statuses qualify. Columns: `code`, `bezeichnung`, `qualifiziert`
+(released-as-qualifying yes/no), `kategorie`, `gueltig_ab` (valid-from),
+`quelle`. `StatusMasterService.qualifyingCodes(asOf)` resolves the latest
+release per code not after the reference date; the **safety rule** — any status
+not explicitly released as qualifying (including statuses absent from the
+master) never counts — is enforced there and unit-tested
+(`status-master.service.spec.ts`). The Fachkonzept tier/compensation engine now
+reads its qualifying set only from this master (`FachkonzeptRunService.compute`
+fills `config.qualifyingStatuses` from `StatusMasterService`), so
+`ConfigKey.QualifyingStatuses` was removed. Seeded from the known status set
+(stand-in for Joules `OPTIONS /clients/statuses`; four qualifying: Liefertermin
+steht fest / In Belieferung / Im Wechsel / Exportiert). Surface:
+`GET /api/status-master` (+ `/qualifying`) for Founder/Backoffice/read-only,
+`POST` (new version) + `POST /seed` for Founder/Admin, audited. Migration
+`1721260800000-StatusMaster.ts`.
+
+**I-05 Role/permission model (#26, ch. 2.1/4.1/17):** Phase 1 is a
+Founder/Backoffice tool only. The role set (`Rolle` in `@blitzon/shared`) is now
+split into **Phase-1 roles** — `admin_gf` (Founder/Admin), `backoffice`
+(Backoffice/Accounting), `readonly` (new read-only viewer, GET surfaces only) —
+and **reserved portal roles** that exist in the model but are exposed by no
+Phase-1 UI/endpoint: `aussendienst` (employee portal), `partner` (new),
+`teamleiter` (legacy internal lead, retired from Phase-1 surfaces). Helper
+constants `PHASE1_READ_ROLLEN` / `PHASE1_OPERATIONS_ROLLEN` /
+`RESERVIERTE_PORTAL_ROLLEN` drive the `@Roles` decorators. Every RolesGuard-
+protected read surface now admits Founder/Backoffice/read-only; operational
+surfaces (create/generate run, import, export) admit Founder/Backoffice only;
+management (users/master data/rules, run Freigabe) stays Founder/Admin. The
+portal roles' data-visibility scoping (contracts/dashboard self-service) is kept
+as groundwork but reaches no gated endpoint in Phase 1. Web nav
+(`app-shell.tsx`) mirrors this. Seed carries one user per role; e2e proves
+read-only can read but not write, and that the retired teamleiter is blocked.
+Auth rate limits (login 5/min, 2FA-verify 10/min) are unchanged in production
+but relaxed under the test runner so the suite's sequential logins don't trip
+the window.
+
+**I-33 Contract-end storage & existing-customer lead time (#54, ch. 5.3/17):**
+delivery start (`lieferbeginn`) and contract end (`vertrag_ende`) are persisted
+for every contract; the import pipeline now maps a contract-end column
+(`import-normalizer.ts` alias set + `import.service` upsert). A general
+existing-customer pre-end lead time is exposed as the system parameter
+`ConfigKey.ExistingCustomerLeadTimeMonths` — **prepared but with no fixed value
+in Phase 1**: its default is `null`, `seedDefaults`/seed skip null-valued keys,
+so the key is resolvable (returns `null`) without assuming any number. Distinct
+from the pre-existing `lead_time_days` (I-31 Vorvertrag rule).
+
 ## Open Questions
 
 1. **Resolved (assumption)**: `erfassungsdatum` missing/serial-0 defaults to the import

@@ -13,12 +13,14 @@ import { FachkonzeptRunService } from './fachkonzept/fachkonzept-run.service';
 import { FachkonzeptRunController } from './fachkonzept/fachkonzept-run.controller';
 import { AuditModule } from '../audit/audit.module';
 import { ConfigStoreModule } from '../config-store/config-store.module';
+import { StatusMasterModule } from '../status-master/status-master.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([CommissionRule, CommissionRun, CommissionLine, Contract, SalesRep]),
     AuditModule,
     ConfigStoreModule,
+    StatusMasterModule,
   ],
   providers: [CommissionRulesService, CommissionRunsService, FachkonzeptRunService],
   controllers: [CommissionRulesController, CommissionRunsController, FachkonzeptRunController],

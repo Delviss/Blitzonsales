@@ -9,6 +9,7 @@ import { SalesRep } from '../../entities/sales-rep.entity';
 import { AuditService } from '../../audit/audit.service';
 import { BusinessConfigService } from '../../config-store/business-config.service';
 import { LedgerService } from '../../config-store/ledger.service';
+import { StatusMasterService } from '../../status-master/status-master.service';
 import {
   computeFachkonzeptRun,
   FachkonzeptRunConfig,
@@ -40,6 +41,7 @@ export class FachkonzeptRunService {
     private readonly config: BusinessConfigService,
     private readonly ledger: LedgerService,
     private readonly audit: AuditService,
+    private readonly statusMaster: StatusMasterService,
   ) {}
 
   findAll(organisationId?: string) {
@@ -177,6 +179,10 @@ export class FachkonzeptRunService {
   private async compute(run: CommissionRun): Promise<FachkonzeptRunResult> {
     const asOf = this.periodEnd(run.periode);
     const config = await this.resolveConfig(asOf);
+    // I-06: the tier engine reads the qualifying-status set only from the status
+    // master, resolved as-of the period. Any status not explicitly released as
+    // qualifying (incl. statuses absent from the master) never counts.
+    config.qualifyingStatuses = await this.statusMaster.qualifyingCodes(asOf);
 
     const reps = await this.repRepo.find({ relations: ['organisation'] });
     const runReps: RunRep[] = reps.map((r) => ({
@@ -221,7 +227,8 @@ export class FachkonzeptRunService {
   private async resolveConfig(asOf: string): Promise<FachkonzeptRunConfig> {
     const g = async <T>(key: ConfigKey) => (await this.config.resolve<T>(key, asOf)) as T;
     return {
-      qualifyingStatuses: await g<string[]>(ConfigKey.QualifyingStatuses),
+      // Filled from the status master by compute() (I-06); see StatusMasterService.
+      qualifyingStatuses: [],
       minConsumptionStrom: await g<number>(ConfigKey.MinConsumptionStrom),
       minConsumptionGas: await g<number>(ConfigKey.MinConsumptionGas),
       employeeTier: await g<Tier[]>(ConfigKey.EmployeeTier),

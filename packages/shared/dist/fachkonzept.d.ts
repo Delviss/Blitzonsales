@@ -54,7 +54,6 @@ export interface Tier {
 export declare function resolveTierRate(count: number, tiers: Tier[]): number;
 /** Keys of every versioned business value (I-01, Fachkonzept ch. 16). */
 export declare enum ConfigKey {
-    QualifyingStatuses = "qualifying_statuses",
     MinConsumptionStrom = "min_consumption_strom",
     MinConsumptionGas = "min_consumption_gas",
     SwaNewCustomerTier = "swa_new_customer_tier",
@@ -78,7 +77,13 @@ export declare enum ConfigKey {
     CommercialReserveRate = "commercial_reserve_rate",
     StornoAccountRate = "storno_account_rate",
     StornoProtectionMonths = "storno_protection_months",
-    LeadTimeDays = "lead_time_days"
+    LeadTimeDays = "lead_time_days",
+    /**
+     * General existing-customer pre-contract-end lead time in months (I-33,
+     * Fachkonzept ch. 5.3). Prepared as a system parameter only — Phase 1 fixes
+     * no value (default `null`), so nothing in the engines assumes a number.
+     */
+    ExistingCustomerLeadTimeMonths = "existing_customer_lead_time_months"
 }
 /**
  * Default values for the initial config version. Placeholders where the

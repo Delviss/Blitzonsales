@@ -3,20 +3,20 @@ import { CommissionRulesService } from './commission-rules.service';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
 import { RolesGuard } from '../common/roles.guard';
 import { Roles } from '../common/roles.decorator';
-import { Rolle } from '@blitzon/shared';
+import { PHASE1_READ_ROLLEN, Rolle } from '@blitzon/shared';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('provisionsregeln')
 export class CommissionRulesController {
   constructor(private readonly svc: CommissionRulesService) {}
 
-  @Roles(Rolle.AdminGf, Rolle.Teamleiter, Rolle.Backoffice)
+  @Roles(...PHASE1_READ_ROLLEN)
   @Get()
   findAll(@Query('organisationId') organisationId?: string) {
     return this.svc.findAll(organisationId);
   }
 
-  @Roles(Rolle.AdminGf, Rolle.Teamleiter, Rolle.Backoffice)
+  @Roles(...PHASE1_READ_ROLLEN)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.svc.findOne(id);
