@@ -11,6 +11,7 @@ export const CANONICAL_FIELDS = [
   'verbrauch',
   'erfassungsdatum',
   'lieferbeginn',
+  'vertragEnde',
   'status',
 ] as const;
 
@@ -27,6 +28,7 @@ export interface NormalizedRow {
   verbrauch: number | null;
   erfassungsdatum: string | null;
   lieferbeginn: string | null;
+  vertragEnde: string | null;
   status: string | null;
 }
 
@@ -46,6 +48,8 @@ const HEADER_ALIASES: Record<CanonicalField, string[]> = {
   verbrauch: ['verbrauch', 'jahresverbrauch', 'kwh', 'verbrauchkwh'],
   erfassungsdatum: ['erfassungsdatum', 'erfasstam', 'erfasstdatum', 'datum'],
   lieferbeginn: ['lieferbeginn', 'lieferstart', 'beginn', 'lieferdatum'],
+  // I-33: contract end is stored for every contract for later existing-customer outreach.
+  vertragEnde: ['vertragende', 'vertragsende', 'laufzeitende', 'endedatum', 'contractend', 'enddatum'],
   status: ['status', 'vertragsstatus', 'antragsstatus'],
 };
 
@@ -129,6 +133,7 @@ export function mapRow(raw: Record<string, unknown>, headerMap: Map<CanonicalFie
     verbrauch: parseNumberValue(get('verbrauch')),
     erfassungsdatum: parseDateValue(get('erfassungsdatum')),
     lieferbeginn: parseDateValue(get('lieferbeginn')),
+    vertragEnde: parseDateValue(get('vertragEnde')),
     status: str(get('status')),
   };
 }

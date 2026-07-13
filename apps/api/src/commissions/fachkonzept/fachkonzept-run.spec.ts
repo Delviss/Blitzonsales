@@ -1,4 +1,4 @@
-import { ClientType, ConfigKey, FACHKONZEPT_DEFAULTS, StartDeliveryType, TariffEnergyType, Tier } from '@blitzon/shared';
+import { ClientType, ConfigKey, FACHKONZEPT_DEFAULTS, STATUS_MASTER_DEFAULTS, StartDeliveryType, TariffEnergyType, Tier } from '@blitzon/shared';
 import {
   computeFachkonzeptRun,
   FachkonzeptRunConfig,
@@ -11,7 +11,8 @@ import {
 function defaultConfig(): FachkonzeptRunConfig {
   const d = FACHKONZEPT_DEFAULTS;
   return {
-    qualifyingStatuses: d[ConfigKey.QualifyingStatuses] as string[],
+    // I-06: qualifying statuses now come from the status master, not config.
+    qualifyingStatuses: STATUS_MASTER_DEFAULTS.filter((s) => s.qualifiziert).map((s) => s.code),
     minConsumptionStrom: d[ConfigKey.MinConsumptionStrom] as number,
     minConsumptionGas: d[ConfigKey.MinConsumptionGas] as number,
     employeeTier: d[ConfigKey.EmployeeTier] as Tier[],

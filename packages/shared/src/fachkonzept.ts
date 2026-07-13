@@ -69,7 +69,6 @@ export function resolveTierRate(count: number, tiers: Tier[]): number {
 
 /** Keys of every versioned business value (I-01, Fachkonzept ch. 16). */
 export enum ConfigKey {
-  QualifyingStatuses = 'qualifying_statuses',
   MinConsumptionStrom = 'min_consumption_strom',
   MinConsumptionGas = 'min_consumption_gas',
   SwaNewCustomerTier = 'swa_new_customer_tier',
@@ -94,6 +93,12 @@ export enum ConfigKey {
   StornoAccountRate = 'storno_account_rate',
   StornoProtectionMonths = 'storno_protection_months',
   LeadTimeDays = 'lead_time_days',
+  /**
+   * General existing-customer pre-contract-end lead time in months (I-33,
+   * Fachkonzept ch. 5.3). Prepared as a system parameter only — Phase 1 fixes
+   * no value (default `null`), so nothing in the engines assumes a number.
+   */
+  ExistingCustomerLeadTimeMonths = 'existing_customer_lead_time_months',
 }
 
 /**
@@ -103,12 +108,6 @@ export enum ConfigKey {
  * 300+ €205); real rate tables are supplied later without code changes (I-01).
  */
 export const FACHKONZEPT_DEFAULTS: Record<ConfigKey, unknown> = {
-  [ConfigKey.QualifyingStatuses]: [
-    'Liefertermin steht fest',
-    'In Belieferung',
-    'Im Wechsel',
-    'Exportiert',
-  ],
   [ConfigKey.MinConsumptionStrom]: 1000,
   [ConfigKey.MinConsumptionGas]: 4000,
   // Only the two documented anchors are authoritative; intermediate steps are
@@ -149,6 +148,9 @@ export const FACHKONZEPT_DEFAULTS: Record<ConfigKey, unknown> = {
   [ConfigKey.StornoAccountRate]: 0.1,
   [ConfigKey.StornoProtectionMonths]: 6,
   [ConfigKey.LeadTimeDays]: 365,
+  // No fixed value in Phase 1 (I-33): the parameter is prepared but unset, so
+  // seedDefaults skips it and resolveConfig returns null until BlitzON sets one.
+  [ConfigKey.ExistingCustomerLeadTimeMonths]: null,
 };
 
 /** A single versioned config entry (I-01). */

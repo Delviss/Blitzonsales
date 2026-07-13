@@ -56,6 +56,9 @@ export class BusinessConfigService {
   async seedDefaults(gueltigAb = '2026-01-01'): Promise<number> {
     let inserted = 0;
     for (const key of Object.values(ConfigKey)) {
+      // I-33: keys with no fixed value in Phase 1 (default null) stay unseeded;
+      // they remain resolvable (returning null) without assuming a number.
+      if (FACHKONZEPT_DEFAULTS[key] === null || FACHKONZEPT_DEFAULTS[key] === undefined) continue;
       const existing = await this.repo.count({ where: { schluessel: key } });
       if (existing > 0) continue;
       await this.setValue(key, FACHKONZEPT_DEFAULTS[key], gueltigAb);

@@ -15,12 +15,13 @@ import { CommissionRule } from '../entities/commission-rule.entity';
 import { CommissionRun } from '../entities/commission-run.entity';
 import { CommissionLine } from '../entities/commission-line.entity';
 import { ConfigVersion } from '../entities/config-version.entity';
-import { ConfigKey, FACHKONZEPT_DEFAULTS } from '@blitzon/shared';
+import { StatusMaster } from '../entities/status-master.entity';
+import { ConfigKey, FACHKONZEPT_DEFAULTS, STATUS_MASTER_DEFAULTS } from '@blitzon/shared';
 
 const ds = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL ?? 'postgresql://blitz:blitzdev@localhost:5432/blitzonsales',
-  entities: [Organisation, SalesRep, Produkt, AppUser, Contract, AuditLog, ImportBatch, CommissionRule, CommissionRun, CommissionLine, ConfigVersion],
+  entities: [Organisation, SalesRep, Produkt, AppUser, Contract, AuditLog, ImportBatch, CommissionRule, CommissionRun, CommissionLine, ConfigVersion, StatusMaster],
   synchronize: false,
 });
 
@@ -78,13 +79,18 @@ async function seed() {
   reps[3].trainerId = reps[0].id;
   await repRepo.save([reps[0], reps[3]]);
 
-  // Users: one per role, for RBAC testing
+  // Users: one per role (I-05). admin_gf/backoffice/readonly are the Phase-1
+  // surfaces; aussendienst/partner/teamleiter are reserved portal roles that
+  // exist in the model but reach no Phase-1 endpoint.
   const pw = await bcrypt.hash('BlitzDev2026!', 12);
   await userRepo.save([
     userRepo.create({ email: 'admin@blitzon.de', password: pw, rolle: 'admin_gf', organisationId: root.id }),
-    userRepo.create({ email: 'teamleiter@blitzon.de', password: pw, rolle: 'teamleiter', organisationId: spear.id }),
     userRepo.create({ email: 'backoffice@blitzon.de', password: pw, rolle: 'backoffice', organisationId: root.id }),
+    userRepo.create({ email: 'readonly@blitzon.de', password: pw, rolle: 'readonly', organisationId: root.id }),
+    // Reserved portal roles (no Phase-1 UI) — kept for RBAC/scoping tests.
+    userRepo.create({ email: 'teamleiter@blitzon.de', password: pw, rolle: 'teamleiter', organisationId: spear.id }),
     userRepo.create({ email: 'verkauf@blitzon.de', password: pw, rolle: 'aussendienst', organisationId: spear.id, repId: reps[0].id }),
+    userRepo.create({ email: 'partner@blitzon.de', password: pw, rolle: 'partner', organisationId: augsburg.id }),
   ]);
 
   // Sample contracts
@@ -133,10 +139,29 @@ async function seed() {
   // every Fachkonzept business value so the engines can resolve them as-of a
   // reference date instead of hardcoding.
   const configRepo = ds.getRepository(ConfigVersion);
-  const configRows = Object.values(ConfigKey).map((key) =>
-    configRepo.create({ schluessel: key, wert: FACHKONZEPT_DEFAULTS[key], gueltigAb: '2026-01-01' }),
-  );
+  const configRows = Object.values(ConfigKey)
+    // I-33: parameters with no fixed value in Phase 1 (default null) are left
+    // unseeded — they exist as configurable keys but assume no number.
+    .filter((key) => FACHKONZEPT_DEFAULTS[key] !== null && FACHKONZEPT_DEFAULTS[key] !== undefined)
+    .map((key) =>
+      configRepo.create({ schluessel: key, wert: FACHKONZEPT_DEFAULTS[key], gueltigAb: '2026-01-01' }),
+    );
   await configRepo.save(configRows);
+
+  // Status master (I-06): seed the initial release, standing in for Joules
+  // OPTIONS /clients/statuses. Only released-qualifying statuses ever count.
+  const statusRepo = ds.getRepository(StatusMaster);
+  const statusRows = STATUS_MASTER_DEFAULTS.map((s) =>
+    statusRepo.create({
+      code: s.code,
+      bezeichnung: s.bezeichnung,
+      qualifiziert: s.qualifiziert,
+      kategorie: s.kategorie,
+      gueltigAb: '2026-01-01',
+      quelle: 'seed',
+    }),
+  );
+  await statusRepo.save(statusRows);
 
   console.log('Seed complete.');
   await ds.destroy();

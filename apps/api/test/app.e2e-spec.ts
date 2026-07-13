@@ -18,6 +18,7 @@ describe('BlitzON Control (e2e)', () => {
   let adminToken: string;
   let teamleiterToken: string;
   let backofficeToken: string;
+  let readonlyToken: string;
   let repToken: string;
 
   beforeAll(async () => {
@@ -28,6 +29,7 @@ describe('BlitzON Control (e2e)', () => {
     await app.init();
 
     teamleiterToken = await loginFull('teamleiter@blitzon.de');
+    readonlyToken = await loginFull('readonly@blitzon.de');
     repToken = await loginFull('verkauf@blitzon.de');
     adminToken = await loginWithMandatory2fa('admin@blitzon.de');
     backofficeToken = await loginWithMandatory2fa('backoffice@blitzon.de');
@@ -79,6 +81,49 @@ describe('BlitzON Control (e2e)', () => {
     expect(runs.status).toBe(403);
   });
 
+  it('retires the legacy Teamleiter role from Phase-1 surfaces (I-05)', async () => {
+    // Teamleiter is a reserved portal role now: it can authenticate but reaches
+    // no Phase-1 endpoint (read or write).
+    const list = await request(app.getHttpServer()).get('/api/provisionslaeufe').set('Authorization', `Bearer ${teamleiterToken}`);
+    expect(list.status).toBe(403);
+    const create = await request(app.getHttpServer())
+      .post('/api/provisionslaeufe')
+      .set('Authorization', `Bearer ${teamleiterToken}`)
+      .send({ periode: '2026-05' });
+    expect(create.status).toBe(403);
+  });
+
+  it('gives the read-only role read access but no write access (I-05)', async () => {
+    // read-only may reach Phase-1 read surfaces
+    const list = await request(app.getHttpServer()).get('/api/provisionslaeufe').set('Authorization', `Bearer ${readonlyToken}`);
+    expect(list.status).toBe(200);
+    const reps = await request(app.getHttpServer()).get('/api/verkaeufer').set('Authorization', `Bearer ${readonlyToken}`);
+    expect(reps.status).toBe(200);
+    const statuses = await request(app.getHttpServer()).get('/api/status-master').set('Authorization', `Bearer ${readonlyToken}`);
+    expect(statuses.status).toBe(200);
+    // but never mutate: creating a run or importing is forbidden
+    const create = await request(app.getHttpServer())
+      .post('/api/provisionslaeufe')
+      .set('Authorization', `Bearer ${readonlyToken}`)
+      .send({ periode: '2026-05' });
+    expect(create.status).toBe(403);
+    const seedStatus = await request(app.getHttpServer())
+      .post('/api/status-master/seed')
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(seedStatus.status).toBe(403);
+  });
+
+  it('serves the seeded status master and its qualifying set (I-06)', async () => {
+    const all = await request(app.getHttpServer()).get('/api/status-master').set('Authorization', `Bearer ${adminToken}`);
+    expect(all.status).toBe(200);
+    expect(all.body.length).toBeGreaterThan(0);
+    const qualifying = await request(app.getHttpServer()).get('/api/status-master/qualifying').set('Authorization', `Bearer ${adminToken}`);
+    expect(qualifying.status).toBe(200);
+    // released-qualifying statuses count; un-released ones (e.g. Storno) never do
+    expect(qualifying.body).toContain('In Belieferung');
+    expect(qualifying.body).not.toContain('Storno');
+  });
+
   it('rejects an import file with no recognisable joules_id column', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/import')
@@ -90,18 +135,18 @@ describe('BlitzON Control (e2e)', () => {
   it('runs a full monthly commission cycle: create -> generate -> four-eyes approve -> export', async () => {
     const createRes = await request(app.getHttpServer())
       .post('/api/provisionslaeufe')
-      .set('Authorization', `Bearer ${teamleiterToken}`)
+      .set('Authorization', `Bearer ${backofficeToken}`)
       .send({ periode: '2026-05' });
     expect(createRes.status).toBe(201);
     const runId = createRes.body.run.id;
     expect(createRes.body.run.status).toBe('entwurf');
     expect(createRes.body.lines.length).toBeGreaterThan(0);
 
-    // the creator (teamleiter) is not even allowed to freigeben (role-gated to admin_gf)
-    const teamleiterFreigabe = await request(app.getHttpServer())
+    // the creator (backoffice) is not allowed to freigeben (role-gated to admin_gf)
+    const creatorFreigabe = await request(app.getHttpServer())
       .post(`/api/provisionslaeufe/${runId}/freigeben`)
-      .set('Authorization', `Bearer ${teamleiterToken}`);
-    expect(teamleiterFreigabe.status).toBe(403);
+      .set('Authorization', `Bearer ${backofficeToken}`);
+    expect(creatorFreigabe.status).toBe(403);
 
     // a different user (admin) approves: four-eyes satisfied
     const freigabe = await request(app.getHttpServer())
@@ -132,7 +177,7 @@ describe('BlitzON Control (e2e)', () => {
     // create + generate in one call (verfahren=fachkonzept)
     const createRes = await request(app.getHttpServer())
       .post('/api/provisionslaeufe/fachkonzept')
-      .set('Authorization', `Bearer ${teamleiterToken}`)
+      .set('Authorization', `Bearer ${backofficeToken}`)
       .send({ periode: '2026-05' });
     expect(createRes.status).toBe(201);
     const runId = createRes.body.run.id;
@@ -149,10 +194,10 @@ describe('BlitzON Control (e2e)', () => {
     // the legacy engine must refuse to touch a Fachkonzept run
     const legacyGenerate = await request(app.getHttpServer())
       .post(`/api/provisionslaeufe/${runId}/generate`)
-      .set('Authorization', `Bearer ${teamleiterToken}`);
+      .set('Authorization', `Bearer ${backofficeToken}`);
     expect(legacyGenerate.status).toBe(409);
 
-    // four-eyes: creator (teamleiter) is role-gated out; admin approves
+    // four-eyes: creator (backoffice) is role-gated out of freigeben; admin approves
     const freigabe = await request(app.getHttpServer())
       .post(`/api/provisionslaeufe/fachkonzept/${runId}/freigeben`)
       .set('Authorization', `Bearer ${adminToken}`);

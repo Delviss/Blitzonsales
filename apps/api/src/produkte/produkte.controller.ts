@@ -3,16 +3,18 @@ import { ProdukteService } from './produkte.service';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
 import { RolesGuard } from '../common/roles.guard';
 import { Roles } from '../common/roles.decorator';
-import { Rolle } from '@blitzon/shared';
+import { PHASE1_READ_ROLLEN, Rolle } from '@blitzon/shared';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('produkte')
 export class ProdukteController {
   constructor(private readonly svc: ProdukteService) {}
 
+  @Roles(...PHASE1_READ_ROLLEN)
   @Get()
   findAll() { return this.svc.findAll(); }
 
+  @Roles(...PHASE1_READ_ROLLEN)
   @Get(':id')
   findOne(@Param('id') id: string) { return this.svc.findOne(id); }
 

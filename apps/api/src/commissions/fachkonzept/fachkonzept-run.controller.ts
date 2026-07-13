@@ -3,7 +3,7 @@ import { FachkonzeptRunService } from './fachkonzept-run.service';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
-import { Rolle } from '@blitzon/shared';
+import { PHASE1_OPERATIONS_ROLLEN, PHASE1_READ_ROLLEN, Rolle } from '@blitzon/shared';
 
 /**
  * Fachkonzept Provisionslauf endpoints. Kept on a dedicated `/fachkonzept`
@@ -14,25 +14,25 @@ import { Rolle } from '@blitzon/shared';
 export class FachkonzeptRunController {
   constructor(private readonly svc: FachkonzeptRunService) {}
 
-  @Roles(Rolle.AdminGf, Rolle.Teamleiter, Rolle.Backoffice)
+  @Roles(...PHASE1_READ_ROLLEN)
   @Get()
   findAll(@Query('organisationId') organisationId?: string) {
     return this.svc.findAll(organisationId);
   }
 
-  @Roles(Rolle.AdminGf, Rolle.Teamleiter, Rolle.Backoffice)
+  @Roles(...PHASE1_READ_ROLLEN)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.svc.findOne(id);
   }
 
-  @Roles(Rolle.AdminGf, Rolle.Teamleiter)
+  @Roles(...PHASE1_OPERATIONS_ROLLEN)
   @Post()
   create(@Body() body: { periode: string; organisationId?: string }, @Request() req: any) {
     return this.svc.create(body, req.user.sub);
   }
 
-  @Roles(Rolle.AdminGf, Rolle.Teamleiter, Rolle.Backoffice)
+  @Roles(...PHASE1_OPERATIONS_ROLLEN)
   @Post(':id/generate')
   generate(@Param('id') id: string, @Request() req: any) {
     return this.svc.generate(id, req.user.sub);

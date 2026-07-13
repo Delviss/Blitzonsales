@@ -64,7 +64,6 @@ function resolveTierRate(count, tiers) {
 /** Keys of every versioned business value (I-01, Fachkonzept ch. 16). */
 var ConfigKey;
 (function (ConfigKey) {
-    ConfigKey["QualifyingStatuses"] = "qualifying_statuses";
     ConfigKey["MinConsumptionStrom"] = "min_consumption_strom";
     ConfigKey["MinConsumptionGas"] = "min_consumption_gas";
     ConfigKey["SwaNewCustomerTier"] = "swa_new_customer_tier";
@@ -89,6 +88,12 @@ var ConfigKey;
     ConfigKey["StornoAccountRate"] = "storno_account_rate";
     ConfigKey["StornoProtectionMonths"] = "storno_protection_months";
     ConfigKey["LeadTimeDays"] = "lead_time_days";
+    /**
+     * General existing-customer pre-contract-end lead time in months (I-33,
+     * Fachkonzept ch. 5.3). Prepared as a system parameter only — Phase 1 fixes
+     * no value (default `null`), so nothing in the engines assumes a number.
+     */
+    ConfigKey["ExistingCustomerLeadTimeMonths"] = "existing_customer_lead_time_months";
 })(ConfigKey || (exports.ConfigKey = ConfigKey = {}));
 /**
  * Default values for the initial config version. Placeholders where the
@@ -97,12 +102,6 @@ var ConfigKey;
  * 300+ €205); real rate tables are supplied later without code changes (I-01).
  */
 exports.FACHKONZEPT_DEFAULTS = {
-    [ConfigKey.QualifyingStatuses]: [
-        'Liefertermin steht fest',
-        'In Belieferung',
-        'Im Wechsel',
-        'Exportiert',
-    ],
     [ConfigKey.MinConsumptionStrom]: 1000,
     [ConfigKey.MinConsumptionGas]: 4000,
     // Only the two documented anchors are authoritative; intermediate steps are
@@ -143,6 +142,9 @@ exports.FACHKONZEPT_DEFAULTS = {
     [ConfigKey.StornoAccountRate]: 0.1,
     [ConfigKey.StornoProtectionMonths]: 6,
     [ConfigKey.LeadTimeDays]: 365,
+    // No fixed value in Phase 1 (I-33): the parameter is prepared but unset, so
+    // seedDefaults skips it and resolveConfig returns null until BlitzON sets one.
+    [ConfigKey.ExistingCustomerLeadTimeMonths]: null,
 };
 /**
  * Resolve a config value as-of a reference date: the entry with the latest
