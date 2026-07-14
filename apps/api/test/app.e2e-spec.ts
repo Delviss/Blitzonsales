@@ -565,4 +565,78 @@ describe('BlitzON Control (e2e)', () => {
       .send({ periode: '2026-05' });
     expect(rerun.status).toBe(201);
   });
+
+  // ---- Wave 6: surfacing + release gate (I-27/I-28/I-30/I-37) --------------
+
+  it('serves the Founder KPI tiles incl. free operating liquidity (I-27/I-30)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/kennzahlen?periode=2026-05')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    // ch. 11.1 tile groups present
+    for (const key of ['swaUmsatz', 'neukundenTier', 'angestellte', 'partner', 'gewerbe', 'warnungen', 'datenqualitaet', 'echtzeit']) {
+      expect(res.body).toHaveProperty(key);
+    }
+    // free operating liquidity is present, net, and reserves are a subtracted component
+    const liq = res.body.freieBetriebsliquiditaet;
+    expect(typeof liq.wert).toBe('number');
+    expect(liq.komponenten).toHaveProperty('gebundeneGewerbeRuecklage');
+    // free liquidity equals inflow minus every committed obligation
+    const k = liq.komponenten;
+    const expected =
+      k.bestaetigterSwaUmsatz - k.faelligeAuszahlungen - k.arbeitgeberkosten -
+      k.stornoKontoReserviert - k.gebundeneGewerbeRuecklage - k.offeneClawbackForderungen;
+    expect(Math.abs(liq.wert - expected)).toBeLessThan(0.01);
+    // real-time projection is explicitly provisional (I-30)
+    expect(res.body.echtzeit.provisorisch).toBe(true);
+  });
+
+  it('exports the KPI snapshot as CSV (I-37)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/kennzahlen/export?periode=2026-05')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.text).toContain('Freie Betriebsliquidität');
+  });
+
+  it('drills a month down to individual SWA order numbers (I-28)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/drilldown/monat/2026-05')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.vertraege)).toBe(true);
+    // every contract row exposes its SWA order number field for traceability
+    for (const row of res.body.vertraege) {
+      expect(row).toHaveProperty('swaOrderNumber');
+    }
+    // the reserves drill-down is reachable too
+    const ruecklagen = await request(app.getHttpServer())
+      .get('/api/drilldown/ruecklagen')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(ruecklagen.status).toBe(200);
+    expect(ruecklagen.body.stornokonten).toBeDefined();
+    expect(ruecklagen.body.gewerbeRuecklagen).toBeDefined();
+  });
+
+  it('evaluates the 11 ch. 18 acceptance criteria as the release gate (I-37)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/akzeptanz?periode=2026-05')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.gesamt).toBe(11);
+    expect(res.body.alleErfuellt).toBe(true);
+    expect(res.body.kriterien).toHaveLength(11);
+  });
+
+  it('confines the surfacing endpoints to Phase-1 read roles (blocks Aussendienst)', async () => {
+    const kennzahlen = await request(app.getHttpServer())
+      .get('/api/kennzahlen')
+      .set('Authorization', `Bearer ${repToken}`);
+    expect(kennzahlen.status).toBe(403);
+    const readonly = await request(app.getHttpServer())
+      .get('/api/kennzahlen?periode=2026-05')
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(readonly.status).toBe(200);
+  });
 });
