@@ -11,6 +11,9 @@ import ProvisionslaeufePage from './pages/ProvisionslaeufePage';
 import ProvisionslaufDetailPage from './pages/ProvisionslaufDetailPage';
 import ImportPage from './pages/ImportPage';
 import DataQualityPage from './pages/DataQualityPage';
+import ForecastPage from './pages/ForecastPage';
+import WiedervorlagenPage from './pages/WiedervorlagenPage';
+import StornoKontenPage from './pages/StornoKontenPage';
 import { AppShell } from './components/app-shell';
 import { Dashboard } from './components/dashboard';
 import { getUser } from './lib/auth';
@@ -37,6 +40,9 @@ export default function App() {
         <Route path="verwaltung/provisionsregeln" element={<ProvisionsregelnPage />} />
         <Route path="provisionslaeufe" element={<ProvisionslaeufePage />} />
         <Route path="provisionslaeufe/:id" element={<ProvisionslaufDetailPage />} />
+        <Route path="forecast" element={<ForecastPage />} />
+        <Route path="wiedervorlagen" element={<WiedervorlagenPage />} />
+        <Route path="stornokonten" element={<StornoKontenPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="datenqualitaet" element={<DataQualityPage />} />
       </Route>

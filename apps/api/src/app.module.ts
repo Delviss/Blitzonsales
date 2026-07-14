@@ -19,6 +19,8 @@ import { StatusMasterModule } from './status-master/status-master.module';
 import { PostingObjectsModule } from './posting-objects/posting-objects.module';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { JoulesModule } from './joules/joules.module';
+import { CrmModule } from './crm/crm.module';
+import { ForecastModule } from './forecast/forecast.module';
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { JoulesModule } from './joules/joules.module';
     PostingObjectsModule,
     IngestionModule,
     JoulesModule,
+    CrmModule,
+    ForecastModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
