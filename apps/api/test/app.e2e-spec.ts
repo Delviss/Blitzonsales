@@ -242,7 +242,10 @@ describe('BlitzON Control (e2e)', () => {
       .set('Authorization', `Bearer ${backofficeToken}`)
       .send({ repId, swaClawback: 2000, causerShare: 0.5, grund: 'Widerruf (e2e)' });
     expect(created.status).toBe(201);
-    expect(created.body.passThrough).toBe(1000); // 2000 × 50%
+    // passThrough is a numeric column with a DB default, so TypeORM's save()
+    // returns it via INSERT…RETURNING and pg serialises it as a string ("1000.00").
+    // Coerce like the reconstruction assertion below already does for `remaining`.
+    expect(Number(created.body.passThrough)).toBe(1000); // 2000 × 50%
     // remaining + all offsets applied must reconstruct the pass-through
     const offsetSum = (created.body.offsets ?? []).reduce((s: number, o: any) => s + Number(o.applied), 0);
     expect(offsetSum + Number(created.body.remaining)).toBeCloseTo(1000, 2);
