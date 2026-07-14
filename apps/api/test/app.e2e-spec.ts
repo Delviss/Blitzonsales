@@ -348,4 +348,98 @@ describe('BlitzON Control (e2e)', () => {
     expect(res.body).toHaveProperty('archivierbar');
     expect(Array.isArray(res.body.auftraege)).toBe(true);
   });
+
+  // --- Wave 4 -------------------------------------------------------------
+
+  it('serves a provisional forecast marked provisional (I-16)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/forecast')
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.provisorisch).toBe(true);
+    expect(res.body).toHaveProperty('swaTier');
+    expect(res.body).toHaveProperty('repTierProjektionen');
+    expect(res.body).toHaveProperty('reversals');
+    expect(res.body.hinweis).toContain('Vorläufig');
+  });
+
+  it('rejects a too-early intake with "Vorlaufzeit zu lang" and schedules a follow-up (I-31/I-32)', async () => {
+    // Binding worked example: pre-contract ending 01.10.2027 ⇒ first admissible 02.10.2026.
+    const res = await request(app.getHttpServer())
+      .post('/api/intake/pruefen')
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ intakeDate: '2025-01-01', vorvertragEnde: '2027-10-01', swaOrderNumber: 'E2E-LEAD-1', kunde: 'E2E Kunde' });
+    expect(res.status).toBe(201);
+    expect(res.body.admissible).toBe(false);
+    expect(res.body.rejectionReason).toBe('Vorlaufzeit zu lang');
+    expect(res.body.firstAdmissibleDate).toBe('2026-10-02');
+    expect(res.body.wiedervorlage).not.toBeNull();
+
+    const list = await request(app.getHttpServer())
+      .get('/api/wiedervorlagen')
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(list.status).toBe(200);
+    const w = list.body.find((x: any) => x.swaOrderNumber === 'E2E-LEAD-1');
+    expect(w).toBeDefined();
+    expect(w.faelligAm).toBe('2026-10-02');
+    expect(w.status).toBe('offen');
+
+    // Process due follow-ups as-of a date on/after the admissible day → one email.
+    const processed = await request(app.getHttpServer())
+      .post('/api/wiedervorlagen/prozess-faellige')
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ stichtag: '2026-10-02' });
+    expect(processed.status).toBe(201);
+    expect(processed.body.gesendet).toBeGreaterThanOrEqual(1);
+  });
+
+  it('admits an intake within the lead time and schedules nothing (I-31)', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/intake/pruefen')
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ intakeDate: '2026-10-02', vorvertragEnde: '2027-10-01' });
+    expect(res.status).toBe(201);
+    expect(res.body.admissible).toBe(true);
+    expect(res.body.wiedervorlage).toBeNull();
+  });
+
+  it('manually releases part of a storno account with full audit (I-26)', async () => {
+    const reps = await request(app.getHttpServer()).get('/api/verkaeufer').set('Authorization', `Bearer ${adminToken}`);
+    // Find a rep with a positive storno balance (funded by an earlier freigabe).
+    const konten = await request(app.getHttpServer()).get('/api/storno-konten').set('Authorization', `Bearer ${adminToken}`);
+    const funded = konten.body.find((k: any) => Number(k.gesamtsaldo) > 0);
+
+    if (!funded) {
+      // No funded account in this run — still assert a reason is mandatory.
+      const repId = reps.body[0].id;
+      const noReason = await request(app.getHttpServer())
+        .post(`/api/storno-konten/${repId}/freigeben`)
+        .set('Authorization', `Bearer ${backofficeToken}`)
+        .send({ betrag: 10, datum: '2026-07-01', genehmigtVon: 'GF' });
+      expect(noReason.status).toBe(400);
+      return;
+    }
+
+    // A release without a reason is rejected (storno credit is never auto-paid).
+    const noReason = await request(app.getHttpServer())
+      .post(`/api/storno-konten/${funded.repId}/freigeben`)
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ betrag: Math.min(10, Number(funded.gesamtsaldo)), datum: '2026-07-01', genehmigtVon: 'GF' });
+    expect(noReason.status).toBe(400);
+
+    const amount = Math.min(10, Number(funded.gesamtsaldo));
+    const released = await request(app.getHttpServer())
+      .post(`/api/storno-konten/${funded.repId}/freigeben`)
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ betrag: amount, datum: '2026-07-01', genehmigtVon: 'GF Müller', grund: 'Krankheit überbrücken' });
+    expect(released.status).toBe(201);
+    expect(released.body.manuellFreigegeben).toBeGreaterThanOrEqual(amount);
+
+    // read-only cannot release
+    const forbidden = await request(app.getHttpServer())
+      .post(`/api/storno-konten/${funded.repId}/freigeben`)
+      .set('Authorization', `Bearer ${readonlyToken}`)
+      .send({ betrag: 1, grund: 'x' });
+    expect(forbidden.status).toBe(403);
+  });
 });

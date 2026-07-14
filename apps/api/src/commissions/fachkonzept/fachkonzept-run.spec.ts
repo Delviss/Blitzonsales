@@ -338,4 +338,36 @@ describe('computeFachkonzeptRun', () => {
     expect(p.auszahlung).toBe(90); // raw, no Fixum protection
     expect(p.stornoEinbehalt).toBe(0);
   });
+
+  // I-26 · inactive employee with open risks: standard payout is held
+  it('holds the standard payout of an inactive rep with open risks (I-26)', () => {
+    const contracts = Array.from({ length: 40 }, (_, i) => baseContract({ id: `c${i}`, repId: 'A' }));
+    const res = computeFachkonzeptRun({
+      periode: '2026-06',
+      config: defaultConfig(),
+      reps: [emp('A', { aktiv: false, offeneRisiken: true })],
+      contracts,
+    });
+    const a = res.repSummaries.find((r) => r.repId === 'A')!;
+    // Commission is still computed and the storno withholding still accrues …
+    expect(a.variableProvision).toBe(3600);
+    expect(a.stornoEinbehalt).toBe(360);
+    // … but the cash-out is blocked (released later via a manual storno freigabe).
+    expect(a.auszahlungGesperrt).toBe(true);
+    expect(a.auszahlung).toBe(0);
+    expect(res.warnungen.some((w) => w.includes('I-26'))).toBe(true);
+  });
+
+  it('does not hold an inactive rep who no longer carries open risks (I-26)', () => {
+    const contracts = Array.from({ length: 40 }, (_, i) => baseContract({ id: `c${i}`, repId: 'A' }));
+    const res = computeFachkonzeptRun({
+      periode: '2026-06',
+      config: defaultConfig(),
+      reps: [emp('A', { aktiv: false, offeneRisiken: false })],
+      contracts,
+    });
+    const a = res.repSummaries.find((r) => r.repId === 'A')!;
+    expect(a.auszahlungGesperrt).toBe(false);
+    expect(a.auszahlung).toBe(3240);
+  });
 });

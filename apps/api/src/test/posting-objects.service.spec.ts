@@ -50,6 +50,56 @@ describe('StornoAccountService (I-23)', () => {
     expect(view.freiVerfuegbar).toBe(700); // 1000 − 300
   });
 
+  it('requires amount, date, approver and reason for a manual release; audits + ledgers it (I-26)', async () => {
+    const rep: Partial<SalesRep> = {
+      id: 'r1', name: 'Rep One',
+      stornoKontoSaldo: 1000, stornoPrivatEinbehalt: 1000, stornoGewerbeEinbehalt: 0,
+      stornoClawbackGenutzt: 0, stornoFreigegeben: 0,
+    };
+    const increment = jest.fn().mockImplementation((_id, field: string, delta: number) => {
+      if (field === 'stornoKontoSaldo') (rep as any).stornoKontoSaldo += delta;
+      return Promise.resolve(undefined);
+    });
+    const clawbackQb = {
+      select: jest.fn().mockReturnThis(), addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(), groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    const ledger = ledgerMock();
+    const audit = auditMock();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        StornoAccountService,
+        { provide: getRepositoryToken(SalesRep), useValue: { findOne: jest.fn().mockResolvedValue(rep), find: jest.fn().mockResolvedValue([rep]), increment } },
+        { provide: getRepositoryToken(ClawbackReceivable), useValue: { createQueryBuilder: () => clawbackQb } },
+        { provide: LedgerService, useValue: ledger },
+        { provide: AuditService, useValue: audit },
+      ],
+    }).compile();
+    const svc = module.get(StornoAccountService);
+
+    // A missing reason is rejected — storno credit is never released without one.
+    await expect(svc.release('r1', { betrag: 200, datum: '2026-07-01', genehmigtVon: 'GF Müller', grund: '' }, 'u1')).rejects.toThrow();
+    // Over-balance is rejected.
+    await expect(svc.release('r1', { betrag: 5000, grund: 'x' }, 'u1')).rejects.toThrow();
+
+    const view = await svc.release('r1', { betrag: 300, datum: '2026-07-01', genehmigtVon: 'GF Müller', grund: 'Krankheit überbrücken' }, 'u1');
+    expect(increment).toHaveBeenCalledWith({ id: 'r1' }, 'stornoKontoSaldo', -300);
+    expect(increment).toHaveBeenCalledWith({ id: 'r1' }, 'stornoFreigegeben', 300);
+    // Ledger records the negative release with the audit trail baked into the reason.
+    const ledgerCall = ledger.appendFinancial.mock.calls.at(-1)[0];
+    expect(ledgerCall.typ).toBe('storno_freigabe');
+    expect(ledgerCall.betrag).toBe(-300);
+    expect(ledgerCall.begruendung).toContain('2026-07-01');
+    expect(ledgerCall.begruendung).toContain('GF Müller');
+    expect(ledgerCall.begruendung).toContain('Krankheit');
+    // Audit captures the structured release.
+    const auditCall = audit.log.mock.calls.at(-1)[0];
+    expect(auditCall.aktion).toBe('storno_freigabe');
+    expect(auditCall.neu).toMatchObject({ betrag: 300, datum: '2026-07-01', genehmigtVon: 'GF Müller' });
+    expect(view.gesamtsaldo).toBe(700);
+  });
+
   it('caps a clawback offset at the current storno balance and reports what it took', async () => {
     const rep: Partial<SalesRep> = { id: 'r1', stornoKontoSaldo: 200 };
     const increment = jest.fn().mockResolvedValue(undefined);

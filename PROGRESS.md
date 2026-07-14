@@ -373,9 +373,77 @@ suite drives a Joules-export import (archive + gating + data-quality view), a
 settlement-list import, the not-configured sync run and the at-risk report.
 
 **Still to build (Phase 1 remainder):** the master-data admin UI polish (I-07 is
-done), the Founder dashboard & drill-downs (P6), CRM/lead-time follow-up (P7),
-month-end close & the warning system (P8). I-08's live authentication remains
-blocked on the BlitzON test-tenant credential (see open question 6).
+done), the Founder dashboard & drill-downs (P6), month-end close & the warning
+system (P8). I-08's live authentication remains blocked on the BlitzON
+test-tenant credential (see open question 6).
+
+## Wave 4 (Live views + acceptance gates) — I-16 / I-22 / I-26 / I-31 / I-32
+
+The running-month projection, the ch. 14 acceptance gate, and the CRM lead-time
+follow-up. All shipped with unit + e2e coverage; only I-31/I-32 needed new
+storage (migration `1722816000000-Wave4LiveViewsGates.ts`).
+
+**I-16 forecast / preview (#37, ch. 11.3):** a live provisional projection from
+the current data. `apps/api/src/forecast/` reuses the *exact* run computation via
+a new non-persisting `FachkonzeptRunService.preview(periode, organisationId)`
+(the private `compute` was refactored to `computeForPeriod` so a run and a
+forecast can never diverge), then layers a per-rep tier projection and reversal
+warnings on top (`forecast.ts`, pure + unit-tested). `projectRepTier` models the
+retroactive switch — 10×€70 now, with the next-threshold *potential* being the
+uplift across the whole month once the 40th qualifies (40×€90 − 10×€70) — and the
+company-wide SWA tier carries its next threshold. `projectReversals` surfaces
+every Storno/Widerruf in the period as a negative-impact warning with the SWA
+figure at risk. Everything is explicitly `provisorisch: true` with a "nothing is
+payable until the SWA list confirms" note. `GET /api/forecast?periode=JJJJ-MM`
+(default current month, Founder/Backoffice/read-only); web page `/forecast`
+(`ForecastPage.tsx`), clearly labelled provisional, with the tier-progress table
+and the reversal warnings.
+
+**I-22 acceptance tests ch. 14.2 & 14.3 (#43):**
+`commissions/fachkonzept/acceptance-14.spec.ts` pins every ch. 14.2 salary/
+balance/storno row (P = 1,800 / 2,100 / 2,300 / 10,000 / 20,000: the guaranteed
+Fixum floor, the 10% storno withholding into the separate account, negative-
+balance accrual in a low month and recovery from pay above the Fixum in a high
+month) and every ch. 14.3 commercial row (total commission 120,000 kWh × 4 ct =
+€4,800, the 25/25 employee and 35/35 partner splits, both SWA halves confirmed in
+one month via the run orchestrator, and an under-consumption clawback pass-through
+offset in the fixed order). The euro figures follow the documented invariants
+(see open question 11); the suite is a single CI gate.
+
+**I-26 manual storno-credit release (#47, ch. 7.5 / 10.1):** storno credit is
+never auto-paid. `StornoAccountService.release` now requires an amount, a release
+date, the approving person and a **mandatory reason** (rejected without one), and
+records all of them in the audit log and the append-only ledger
+(`storno_freigabe`). The release surface moved to Founder/Backoffice
+(`POST /api/storno-konten/:repId/freigeben`). The inactive-lock: `RunRep` gained
+`aktiv` + `offeneRisiken`, and the run holds an inactive rep's standard payout
+(`auszahlung = 0`, `auszahlungGesperrt = true`, warning) while open risks remain —
+the commission is still computed and the storno withholding still accrues; only
+the cash-out is blocked, to be released later via a manual freigabe. Web page
+`/stornokonten` (`StornoKontenPage.tsx`) shows the ch. 10.1 breakdown and a
+release dialog capturing amount/date/approver/reason.
+
+**I-31 lead-time rule (#52, ch. 5.3 / 16):** `crm/lead-time.ts` (pure, unit-
+tested) evaluates an intake against the configurable lead time (`ConfigKey.
+LeadTimeDays`, default 365). The delivery start is the day after the pre-contract
+ends; a breach (`deliveryStart − intake > leadTimeDays`) yields the exact SWA
+rejection reason **"Vorlaufzeit zu lang"** and the first admissible intake day
+(`deliveryStart − leadTimeDays`).
+
+**I-32 Wiedervorlage + email (#53, ch. 5.3 / 13 / 17):** on a breach
+`WiedervorlageService` schedules a follow-up for the first admissible day and a
+due-processor emails Founder/Backoffice on/after that day. The **binding worked
+example passes exactly** (pre-contract ending 01.10.2027 ⇒ follow-up due
+02.10.2026) at the unit, service and e2e level. The mail transport is bound
+behind an `EMAIL_SENDER` token; the default `LoggingEmailSender` records every
+message to a new `email_outbox` table (verifiable/auditable) since the concrete
+sender/recipient list is an open input (recipients default to every Founder/
+Backoffice user, overridable via `WIEDERVORLAGE_EMAIL_RECIPIENTS`). Dispatch is
+idempotent (never double-sends). Surfaces: `POST /api/intake/pruefen`,
+`GET /api/wiedervorlagen`, `POST /api/wiedervorlagen/prozess-faellige` (also an
+opt-in daily scheduler, `WIEDERVORLAGE_SCHEDULER_ENABLED`),
+`POST /api/wiedervorlagen/:id/erledigt`; web page `/wiedervorlagen` with the
+intake check + follow-up list.
 
 ## Open Questions
 

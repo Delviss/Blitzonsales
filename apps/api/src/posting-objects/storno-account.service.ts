@@ -88,17 +88,40 @@ export class StornoAccountService {
     return applied;
   }
 
-  /** Manually release a part of the storno account (Founder only). */
-  async release(repId: string, amount: number, userId: string, begruendung?: string): Promise<StornoAccountView> {
+  /**
+   * Manually release a part of the storno account (I-26, Fachkonzept ch. 7.5 /
+   * 10.1). Storno credit is never auto-paid: a partial release is always a
+   * deliberate Founder/Backoffice action requiring an amount, a release date, the
+   * approving person and a reason (e.g. bridging sickness/holiday). Every release
+   * is fully audited (audit log + append-only ledger entry).
+   */
+  async release(
+    repId: string,
+    input: { betrag: number; datum?: string | null; genehmigtVon?: string | null; grund?: string | null },
+    userId: string,
+  ): Promise<StornoAccountView> {
     const rep = await this.repRepo.findOne({ where: { id: repId } });
     if (!rep) throw new NotFoundException();
-    const amt = round2(amount);
-    if (amt <= 0) throw new BadRequestException('Freigabebetrag muss positiv sein.');
+    const amt = round2(input.betrag);
+    if (!Number.isFinite(amt) || amt <= 0) throw new BadRequestException('Freigabebetrag muss positiv sein.');
     if (amt > Number(rep.stornoKontoSaldo)) throw new BadRequestException('Freigabebetrag übersteigt den Saldo des Stornokontos.');
+    const grund = (input.grund ?? '').trim();
+    if (!grund) throw new BadRequestException('Eine Begründung ist für jede Storno-Freigabe erforderlich.');
+    const datum = input.datum || new Date().toISOString().slice(0, 10);
+    const genehmigtVon = (input.genehmigtVon ?? '').trim() || userId;
+    const monat = datum.slice(0, 7);
+    const begruendung = `Freigabe am ${datum} durch ${genehmigtVon}: ${grund}`;
+
     await this.repRepo.increment({ id: repId }, 'stornoKontoSaldo', -amt);
     await this.repRepo.increment({ id: repId }, 'stornoFreigegeben', amt);
-    await this.ledger.appendFinancial({ monat: null, typ: 'storno_freigabe', betrag: -amt, quelle: 'manual', akteur: userId, begruendung });
-    await this.audit.log({ entity: 'sales_rep', entityId: repId, aktion: 'storno_freigabe', neu: { betrag: amt, begruendung } as any, userId });
+    await this.ledger.appendFinancial({ monat, typ: 'storno_freigabe', betrag: -amt, quelle: 'manual', akteur: userId, begruendung });
+    await this.audit.log({
+      entity: 'sales_rep',
+      entityId: repId,
+      aktion: 'storno_freigabe',
+      neu: { betrag: amt, datum, genehmigtVon, grund } as any,
+      userId,
+    });
     return (await this.summary(repId))[0];
   }
 

@@ -210,10 +210,27 @@ export class FachkonzeptRunService {
     return { run, lines, summary: run.fachkonzeptZusammenfassung ?? null };
   }
 
+  /**
+   * Provisional projection for a period from the *current* live data, without
+   * persisting anything (I-16). Reuses the exact same computation as a real run
+   * so the forecast and the eventual booking never diverge; the caller marks the
+   * result "provisional" and layers the reversal warnings on top.
+   */
+  async preview(periode: string, organisationId?: string | null): Promise<FachkonzeptRunResult> {
+    if (!periode || !PERIODE_RE.test(periode)) {
+      throw new BadRequestException('periode muss im Format JJJJ-MM angegeben werden.');
+    }
+    return this.computeForPeriod(periode, organisationId ?? null);
+  }
+
   // -- internals -------------------------------------------------------------
 
-  private async compute(run: CommissionRun): Promise<FachkonzeptRunResult> {
-    const asOf = this.periodEnd(run.periode);
+  private compute(run: CommissionRun): Promise<FachkonzeptRunResult> {
+    return this.computeForPeriod(run.periode, run.organisationId);
+  }
+
+  private async computeForPeriod(periode: string, organisationId: string | null): Promise<FachkonzeptRunResult> {
+    const asOf = this.periodEnd(periode);
     const config = await this.resolveConfig(asOf);
     // I-06: the tier engine reads the qualifying-status set only from the status
     // master, resolved as-of the period. Any status not explicitly released as
@@ -227,15 +244,19 @@ export class FachkonzeptRunService {
       trainerId: r.trainerId,
       teamleadId: r.teamleadId,
       negativsaldo: Number(r.negativsaldo ?? 0),
+      aktiv: r.aktiv !== false,
+      // I-26: open risks = a carried negative balance or a non-empty storno risk
+      // buffer. An inactive rep with either is blocked from standard payouts.
+      offeneRisiken: Number(r.negativsaldo ?? 0) > 0 || Number(r.stornoKontoSaldo ?? 0) > 0,
     }));
 
-    const where = run.organisationId ? { organisationId: run.organisationId } : {};
+    const where = organisationId ? { organisationId } : {};
     const allContracts = await this.contractRepo.find({ where });
     const contracts: RunContract[] = allContracts
       // I-11: data-quality-gated contracts get no automatic booking until the
       // flagged record is corrected (Fachkonzept ch. 11.1 „Datenqualität").
       .filter((ct) => !ct.datenqualitaetGesperrt)
-      .filter((ct) => (ct.erfassungsdatum ?? '').startsWith(run.periode))
+      .filter((ct) => (ct.erfassungsdatum ?? '').startsWith(periode))
       .map((ct) => {
         const isGas = ct.tariffEnergyType === TariffEnergyType.Gas;
         const surcharge = isGas ? ct.rateExtraProfitProvisionGp : ct.rateExtraProfitProvision;
@@ -256,7 +277,7 @@ export class FachkonzeptRunService {
         };
       });
 
-    return computeFachkonzeptRun({ periode: run.periode, config, reps: runReps, contracts });
+    return computeFachkonzeptRun({ periode, config, reps: runReps, contracts });
   }
 
   private periodEnd(periode: string): string {

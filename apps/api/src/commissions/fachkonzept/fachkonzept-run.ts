@@ -79,6 +79,12 @@ export interface RunRep {
   teamleadId: string | null;
   /** carried negative-commission balance (I-18), informational for this run. */
   negativsaldo: number;
+  /** whether the rep is currently active. Inactive reps with open risks are
+   * blocked from standard payouts (I-26, Fachkonzept ch. 7.5). Defaults true. */
+  aktiv?: boolean;
+  /** whether the rep still carries open risks (open clawbacks / storno balance /
+   * negative balance). Only relevant while inactive (I-26). */
+  offeneRisiken?: boolean;
 }
 
 /** A contract normalized to exactly what the engine consumes. */
@@ -158,6 +164,10 @@ export interface RepSummary {
   stornoEinbehaltPrivat: number;
   /** storno withholding attributed to commercial commission (I-23 ch. 10.1). */
   stornoEinbehaltGewerbe: number;
+  /** standard payout held because the rep is inactive with open risks (I-26).
+   * The commission is still computed and the storno withholding still accrues;
+   * only the cash-out is blocked, released later via a manual storno freigabe. */
+  auszahlungGesperrt: boolean;
 }
 
 /**
@@ -469,6 +479,14 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
     const qualifiedNewCount = qualifiedNewByRep.get(repId) ?? 0;
     const tiers = isPartner ? c.partnerTier : c.employeeTier;
 
+    // I-26: an inactive rep who still carries open risks is blocked from
+    // standard payouts; the commission is still computed but not paid out — a
+    // release happens later as a manual storno freigabe.
+    const inaktivGesperrt = rep?.aktiv === false && rep?.offeneRisiken === true;
+    if (inaktivGesperrt) {
+      warnungen.push(`Rep ${repId}: inaktiv mit offenen Risiken — Standard-Auszahlung gesperrt (I-26).`);
+    }
+
     if (isPartner) {
       // Partners are not salaried: raw commission, no Fixum, no storno withholding.
       repSummaries.push({
@@ -477,13 +495,14 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
         qualifiedNewCount,
         tierRate: tierRateForCount(qualifiedNewCount, tiers),
         variableProvision: variable,
-        auszahlung: variable,
+        auszahlung: inaktivGesperrt ? 0 : variable,
         negativsaldoDelta: 0,
         negativsaldoRecovered: 0,
         negativsaldoAfter: 0,
         stornoEinbehalt: 0,
         stornoEinbehaltPrivat: 0,
         stornoEinbehaltGewerbe: 0,
+        auszahlungGesperrt: inaktivGesperrt,
       });
       continue;
     }
@@ -496,13 +515,14 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
       qualifiedNewCount,
       tierRate: tierRateForCount(qualifiedNewCount, tiers),
       variableProvision: variable,
-      auszahlung: salary.paid,
+      auszahlung: inaktivGesperrt ? 0 : salary.paid,
       negativsaldoDelta: salary.negativeBalanceDelta,
       negativsaldoRecovered: salary.negativeBalanceRecovered,
       negativsaldoAfter: salary.negativeBalanceAfter,
       stornoEinbehalt: salary.stornoWithheld,
       stornoEinbehaltPrivat: storno.privat,
       stornoEinbehaltGewerbe: storno.gewerbe,
+      auszahlungGesperrt: inaktivGesperrt,
     });
   }
   repSummaries.sort((a, b) => a.repId.localeCompare(b.repId));
