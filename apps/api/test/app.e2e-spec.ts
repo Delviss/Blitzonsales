@@ -445,4 +445,124 @@ describe('BlitzON Control (e2e)', () => {
       .send({ betrag: 1, grund: 'x' });
     expect(forbidden.status).toBe(403);
   });
+
+  it('serves the ch. 13 warning & check list with per-level counts (I-35)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/warnungen?periode=2026-05')
+      .set('Authorization', `Bearer ${backofficeToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('counts');
+    expect(res.body.counts).toHaveProperty('rot');
+    expect(res.body.counts).toHaveProperty('gelb');
+    expect(res.body.counts).toHaveProperty('info');
+    expect(Array.isArray(res.body.warnings)).toBe(true);
+    // read-only may view the checks too
+    const ro = await request(app.getHttpServer())
+      .get('/api/warnungen?periode=2026-05')
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(ro.status).toBe(200);
+  });
+
+  it('records a manual SWA override with full audit and keeps the original visible (I-36)', async () => {
+    const contracts = await request(app.getHttpServer())
+      .get('/api/vertraege')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const contractId = contracts.body[0].id;
+
+    // a reason is mandatory
+    const noReason = await request(app.getHttpServer())
+      .post(`/api/commission/${contractId}/override`)
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ neuWert: 123.45 });
+    expect(noReason.status).toBe(400);
+
+    // read-only cannot override
+    const forbidden = await request(app.getHttpServer())
+      .post(`/api/commission/${contractId}/override`)
+      .set('Authorization', `Bearer ${readonlyToken}`)
+      .send({ neuWert: 123.45, grund: 'x' });
+    expect(forbidden.status).toBe(403);
+
+    const overridden = await request(app.getHttpServer())
+      .post(`/api/commission/${contractId}/override`)
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ neuWert: 123.45, grund: 'Korrektur laut SWA-Beleg', dokument: 'beleg-2026-05.pdf' });
+    expect(overridden.status).toBe(201);
+    expect(Number(overridden.body.effektiverWert)).toBe(123.45);
+    // the original SWA value stays visible next to the override, and the trail
+    // records old/new/reason.
+    expect(overridden.body).toHaveProperty('originalSwa');
+    expect(overridden.body.overrides.length).toBeGreaterThanOrEqual(1);
+    expect(overridden.body.overrides[0].grund).toBe('Korrektur laut SWA-Beleg');
+
+    const view = await request(app.getHttpServer())
+      .get(`/api/commission/${contractId}/override`)
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(view.status).toBe(200);
+    expect(Number(view.body.effektiverWert)).toBe(123.45);
+  });
+
+  it('closes a month, freezes it, and blocks new runs; reopen is Founder-only + audited (I-34)', async () => {
+    // read-only cannot close
+    const roForbidden = await request(app.getHttpServer())
+      .post('/api/monatsabschluss')
+      .set('Authorization', `Bearer ${readonlyToken}`)
+      .send({ periode: '2026-05' });
+    expect(roForbidden.status).toBe(403);
+
+    // Backoffice closes 2026-05 (which already carries a frozen run).
+    const close = await request(app.getHttpServer())
+      .post('/api/monatsabschluss')
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ periode: '2026-05' });
+    expect(close.status).toBe(201);
+    expect(close.body.closed).toBe(true);
+
+    const status = await request(app.getHttpServer())
+      .get('/api/monatsabschluss/2026-05')
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(status.body.closed).toBe(true);
+    expect(status.body.snapshot).toBeTruthy();
+
+    // a closed month is frozen: no new run may be created for it
+    const blocked = await request(app.getHttpServer())
+      .post('/api/provisionslaeufe/fachkonzept')
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ periode: '2026-05' });
+    expect(blocked.status).toBe(409);
+
+    // closing again is rejected
+    const again = await request(app.getHttpServer())
+      .post('/api/monatsabschluss')
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ periode: '2026-05' });
+    expect(again.status).toBe(409);
+
+    // reopen is Founder/Admin-only and requires a reason
+    const boReopen = await request(app.getHttpServer())
+      .post('/api/monatsabschluss/2026-05/reopen')
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ grund: 'x' });
+    expect(boReopen.status).toBe(403);
+
+    const noReason = await request(app.getHttpServer())
+      .post('/api/monatsabschluss/2026-05/reopen')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({});
+    expect(noReason.status).toBe(400);
+
+    const reopened = await request(app.getHttpServer())
+      .post('/api/monatsabschluss/2026-05/reopen')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ grund: 'Nachbuchung laut SWA-Abrechnung' });
+    expect(reopened.status).toBe(201);
+    expect(reopened.body.closed).toBe(false);
+
+    // after reopening, a run may be created again for the month
+    const rerun = await request(app.getHttpServer())
+      .post('/api/provisionslaeufe/fachkonzept')
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .send({ periode: '2026-05' });
+    expect(rerun.status).toBe(201);
+  });
 });

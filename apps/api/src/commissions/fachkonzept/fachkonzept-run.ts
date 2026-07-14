@@ -110,11 +110,28 @@ export interface RunContract {
   lieferbeginnConfirmed: boolean;
 }
 
+/**
+ * A late-arriving contract that belongs to an already **closed** month (I-34,
+ * Fachkonzept ch. 12.3 / 5.2). After a month is closed its figures are
+ * immutable, so a contract that only became commissionable afterwards (the
+ * classic July-negative → August-positive case, ch. 14.1) is booked in the
+ * current open month as an **addendum**, tagged with the original capture month
+ * and SWA order number rather than reopening the closed month.
+ */
+export interface AddendumContract extends RunContract {
+  /** the original (now closed) capture month this correction belongs to (JJJJ-MM). */
+  urspruungsMonat: string;
+  /** SWA order number of the original contract, carried for the reference. */
+  swaOrderNumber?: string | null;
+}
+
 export interface FachkonzeptRunInput {
   periode: string; // JJJJ-MM
   config: FachkonzeptRunConfig;
   reps: RunRep[];
   contracts: RunContract[];
+  /** contracts from earlier closed months booked in this month as addenda (I-34). */
+  addenda?: AddendumContract[];
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +158,10 @@ export interface RunLine {
   /** needs a human data-check (unqualified, over-cap surcharge, …). */
   datencheck: boolean;
   begruendung: string;
+  /** true when this line settles a contract from an already-closed month (I-34). */
+  istAddendum?: boolean;
+  /** the original capture month referenced by an addendum line (I-34). */
+  urspruungsMonat?: string | null;
 }
 
 export interface RepSummary {
@@ -238,12 +259,31 @@ const asEnum = (v: unknown): string | null => (v == null ? null : String(v));
  * Deterministic and side-effect free.
  */
 export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRunResult {
-  const { config: c, contracts, reps } = input;
+  const { config: c, reps } = input;
   const repById = new Map(reps.map((r) => [r.id, r]));
   const lines: RunLine[] = [];
   const reserves: ReserveSummary[] = [];
   const plausibilities: PlausibilitySummary[] = [];
   const warnungen: string[] = [];
+
+  // I-34: addenda are booked in this open month alongside the month's own
+  // contracts, but every line they produce is tagged with the original (closed)
+  // capture month so the closed month is never reopened. They otherwise flow
+  // through the exact same qualification / tier / plausibility logic.
+  const addenda = input.addenda ?? [];
+  const addendumMonatById = new Map<string, string>(addenda.map((a) => [a.id, a.urspruungsMonat]));
+  const contracts: RunContract[] = [...input.contracts, ...addenda];
+  const pushLine = (l: RunLine): void => {
+    const m = addendumMonatById.get(l.contractId);
+    if (m) {
+      l.istAddendum = true;
+      l.urspruungsMonat = m;
+      if (!l.begruendung.includes('Nachtrag')) {
+        l.begruendung = `Nachtrag zu ${m}: ${l.begruendung}`;
+      }
+    }
+    lines.push(l);
+  };
 
   // Per-rep gross variable commission accumulator (own income + overheads earned)
   // and the subset that stems from commercial contracts (for the storno split, I-23).
@@ -315,7 +355,7 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
       );
       for (const claim of claims) {
         const kategorie: LineKategorie = claim.role === 'team_lead' ? 'overhead_teamlead' : 'overhead_trainer';
-        lines.push({
+        pushLine({
           contractId: ct.id,
           repId: claim.beneficiaryRepId,
           kategorie,
@@ -357,7 +397,7 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
         partnerImmediate: c.commercialSharePartnerImmediate,
         partnerRetention: c.commercialSharePartnerRetention,
       });
-      lines.push({
+      pushLine({
         contractId: ct.id,
         repId: ct.repId,
         kategorie: 'gewerbe_sofort',
@@ -373,7 +413,7 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
       // SWA commission is the commercial engine total (consumption × surcharge),
       // not the flat per-customer tier rate.
       addPlausibility(ct.id, 'gewerbe', total.totalCommission, ct.actualSwaProvision);
-      lines.push({
+      pushLine({
         contractId: ct.id,
         repId: ct.repId,
         kategorie: 'gewerbe_ruecklage',
@@ -411,7 +451,7 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
         partnerPayout: c.existingCustomerPartnerPayout,
       });
       const betrag = isPartner ? comp.partnerPayout : comp.employeePayout;
-      lines.push({
+      pushLine({
         contractId: ct.id,
         repId: ct.repId,
         kategorie: 'bestandskunde',
@@ -428,10 +468,14 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
     // --- Private new customer (I-13/I-15) ---
     const qualifies = isQualifyingStatus(ct.status) && meetsMin(ct);
     if (!qualifies) {
+      // I-34: a carried-over addendum that still does not qualify stays silent —
+      // it is not booked and produces no line, so it keeps being re-checked in
+      // later months without cluttering every run with a €0 placeholder.
+      if (addendumMonatById.has(ct.id)) continue;
       const grund = !isQualifyingStatus(ct.status)
         ? `Status "${ct.status}" qualifiziert nicht`
         : 'Mindestverbrauch nicht erreicht';
-      lines.push({
+      pushLine({
         contractId: ct.id,
         repId: ct.repId,
         kategorie: 'neukunde_unqualifiziert',
@@ -444,7 +488,7 @@ export function computeFachkonzeptRun(input: FachkonzeptRunInput): FachkonzeptRu
     }
     const count = ct.repId ? qualifiedNewByRep.get(ct.repId) ?? 0 : 0;
     const rate = tierRateForCount(count, tiers); // retroactive rate for the whole month
-    lines.push({
+    pushLine({
       contractId: ct.id,
       repId: ct.repId,
       kategorie: 'neukunde_staffel',

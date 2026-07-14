@@ -14,6 +14,8 @@ import DataQualityPage from './pages/DataQualityPage';
 import ForecastPage from './pages/ForecastPage';
 import WiedervorlagenPage from './pages/WiedervorlagenPage';
 import StornoKontenPage from './pages/StornoKontenPage';
+import WarnungenPage from './pages/WarnungenPage';
+import MonatsabschlussPage from './pages/MonatsabschlussPage';
 import { AppShell } from './components/app-shell';
 import { Dashboard } from './components/dashboard';
 import { getUser } from './lib/auth';
@@ -41,6 +43,8 @@ export default function App() {
         <Route path="provisionslaeufe" element={<ProvisionslaeufePage />} />
         <Route path="provisionslaeufe/:id" element={<ProvisionslaufDetailPage />} />
         <Route path="forecast" element={<ForecastPage />} />
+        <Route path="warnungen" element={<WarnungenPage />} />
+        <Route path="monatsabschluss" element={<MonatsabschlussPage />} />
         <Route path="wiedervorlagen" element={<WiedervorlagenPage />} />
         <Route path="stornokonten" element={<StornoKontenPage />} />
         <Route path="import" element={<ImportPage />} />

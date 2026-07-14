@@ -445,6 +445,66 @@ opt-in daily scheduler, `WIEDERVORLAGE_SCHEDULER_ENABLED`),
 `POST /api/wiedervorlagen/:id/erledigt`; web page `/wiedervorlagen` with the
 intake check + follow-up list.
 
+## Wave 5 (Governance) — I-34 / I-35 / I-36 / I-17
+
+The immutability + oversight layer of Epic P8. All shipped with pure unit tests,
+service/HTTP coverage and web surfaces; migration
+`1723420800000-Wave5Governance.ts` adds the two new tables (`month_close`,
+`manual_override`).
+
+**I-34 month-end close & freeze (#55, ch. 12.3 / 5.2):** an explicit close per
+billing month after which that month's volumes/tiers/payouts/KPIs are immutable.
+`apps/api/src/month-close/`: `MonthCloseService.close(periode)` reuses the exact
+run computation (`FachkonzeptRunService.preview`, never a divergent number) to
+freeze a **snapshot** of the month's figures and record the set of
+commissionable contract ids at close; `reopen(periode, grund)` is
+Founder/Admin-only, requires a reason and is audited (as is `close`). The freeze
+is enforced in `FachkonzeptRunService`: `create` / `generate` / `freigeben` all
+reject a closed month (409), so a frozen month's booked figures never change.
+Later SWA information surfaces as an **addendum** in the current open month:
+`computeFachkonzeptRun` gained an `addenda` input (pure), and the run service
+picks up non-gated contracts whose capture month is an earlier *closed* month and
+that were not yet booked, tags every resulting line with the original month + SWA
+order number (`istAddendum` / `urspruungsMonat`), and never reopens the closed
+month. A still-non-qualifying carryover stays silent (no €0 placeholder).
+`GET/POST /api/monatsabschluss(/:periode)(/reopen)`; web page `/monatsabschluss`.
+
+**I-35 warning & check system (#56, ch. 13 + 8 / 9.1):** the Founder dashboard's
+red/yellow/info checks. `apps/api/src/warnings/warnings.ts` is the pure rule set
+(each check unit-tested against its ch. 13 action): **red** — payout > related
+SWA revenue (block/flag, manual release with reason), commercial reserve actual <
+target, surcharge over cap (Strom 4 ct / Gas 2 ct), SWA tier deviates from the
+control tier, unknown rep/org or missing order number; **yellow** — employee with
+a negative balance, retention due in 30/60/90 days, storno/correction within the
+liability window, lead-time customer contactable again; **info** — next tier level
+reachable. `WarningsService` loads the live data (reusing the run preview for
+per-contract payout + per-rep tier progress, the persisted commercial reserves
+for under-funding, the versioned config for the caps + storno window) and returns
+the ranked list with per-level counts. `GET /api/warnungen?periode=JJJJ-MM`; web
+page `/warnungen`.
+
+**I-36 manual overrides + audit (#57, ch. 12.2 / 12.1):** a fully-auditable
+manual correction that never hides the original SWA value. `apps/api/src/overrides/`:
+`OverrideService.overrideContractSwa` sets the contract's `manueller_override`
+(the value the run now books — the engine reads `manuellerOverride ??
+tatsaechlicheSwaProvision ?? swaGesamtprovision`) while leaving the original SWA
+figures in place, and writes a reconstructable trail: an append-only
+`manual_override` row (actor / timestamp / old / new / original SWA / mandatory
+reason / optional document), an offsetting `correction` financial-ledger entry
+referencing the original month + order number, and an audit-log entry. Reason is
+mandatory; all corrections are Founder/Backoffice-only.
+`POST /api/commission/:id/override` + `GET /api/commission/:id/override` (shows
+the original next to the effective value and the trail).
+
+**I-17 acceptance tests ch. 14.1 (#38):**
+`commissions/fachkonzept/acceptance-14-1.spec.ts` pins every ch. 14.1 case: the
+39 → €70 (€2,730) / 40 → €90 (€3,600, the 40th recomputes the whole month) / 80 →
+€100 (€8,000) retroactive staffel (I-15), electricity + gas as two separate
+qualified counts, a below-minimum 900 kWh private contract not counted (I-13),
+and the July-negative → August-positive contract booked only as an August
+addendum tagged with the frozen July month while a recompute of July stays
+byte-for-byte identical (I-34). A single CI gate.
+
 ## Open Questions
 
 1. **Resolved (assumption)**: `erfassungsdatum` missing/serial-0 defaults to the import
@@ -509,3 +569,11 @@ intake check + follow-up list.
     (missing order number, unknown/absent rep, unknown org, missing commercial term, invalid
     surcharge/status) gate a contract from automatic booking. Confirm this split against the
     Fachkonzept before go-live.
+16. **Still open (I-34, assumption)**: months are expected to be closed in chronological
+    order. An addendum from a closed month is booked in the first open run after its origin
+    month; closing that run's month records the contract in its booked set so it is not
+    re-added later. The addendum is booked at the current open month's applicable staffel
+    rate and counts toward that month's tier (the frozen origin month is never recomputed).
+    Confirm the addendum's tier treatment against ch. 14.1 before the first cross-month
+    payout. I-35's SWA "control tier" is left unset (per-contract plausibility already
+    flags SWA deviations); wire the authoritative control-tier value when supplied.

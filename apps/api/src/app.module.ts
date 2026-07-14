@@ -21,6 +21,9 @@ import { IngestionModule } from './ingestion/ingestion.module';
 import { JoulesModule } from './joules/joules.module';
 import { CrmModule } from './crm/crm.module';
 import { ForecastModule } from './forecast/forecast.module';
+import { MonthCloseModule } from './month-close/month-close.module';
+import { OverrideModule } from './overrides/override.module';
+import { WarningsModule } from './warnings/warnings.module';
 
 @Module({
   imports: [
@@ -56,6 +59,9 @@ import { ForecastModule } from './forecast/forecast.module';
     JoulesModule,
     CrmModule,
     ForecastModule,
+    MonthCloseModule,
+    OverrideModule,
+    WarningsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

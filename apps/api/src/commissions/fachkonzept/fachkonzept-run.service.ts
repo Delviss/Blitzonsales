@@ -6,6 +6,7 @@ import { CommissionRun } from '../../entities/commission-run.entity';
 import { CommissionLine } from '../../entities/commission-line.entity';
 import { Contract } from '../../entities/contract.entity';
 import { SalesRep } from '../../entities/sales-rep.entity';
+import { MonthClose } from '../../entities/month-close.entity';
 import { AuditService } from '../../audit/audit.service';
 import { BusinessConfigService } from '../../config-store/business-config.service';
 import { LedgerService } from '../../config-store/ledger.service';
@@ -13,6 +14,7 @@ import { StatusMasterService } from '../../status-master/status-master.service';
 import { CommercialReserveService } from '../../posting-objects/commercial-reserve.service';
 import { StornoAccountService } from '../../posting-objects/storno-account.service';
 import {
+  AddendumContract,
   computeFachkonzeptRun,
   FachkonzeptRunConfig,
   FachkonzeptRunResult,
@@ -40,6 +42,7 @@ export class FachkonzeptRunService {
     @InjectRepository(CommissionLine) private readonly lineRepo: Repository<CommissionLine>,
     @InjectRepository(Contract) private readonly contractRepo: Repository<Contract>,
     @InjectRepository(SalesRep) private readonly repRepo: Repository<SalesRep>,
+    @InjectRepository(MonthClose) private readonly monthCloseRepo: Repository<MonthClose>,
     private readonly config: BusinessConfigService,
     private readonly ledger: LedgerService,
     private readonly audit: AuditService,
@@ -59,6 +62,9 @@ export class FachkonzeptRunService {
     if (!data.periode || !PERIODE_RE.test(data.periode)) {
       throw new BadRequestException('periode muss im Format JJJJ-MM angegeben werden.');
     }
+    // I-34: a closed month is frozen — no run may be created for it. Later SWA
+    // information surfaces only as an addendum in the current open month.
+    await this.assertNotClosed(data.periode);
     const run = this.runRepo.create({
       periode: data.periode,
       organisationId: data.organisationId ?? null,
@@ -82,6 +88,8 @@ export class FachkonzeptRunService {
     if (run.status !== RunStatus.Entwurf) {
       throw new ConflictException('Nur Entwürfe können neu berechnet werden.');
     }
+    // I-34: never recompute a run whose month has since been closed (frozen).
+    await this.assertNotClosed(run.periode);
 
     const result = await this.compute(run);
 
@@ -143,6 +151,8 @@ export class FachkonzeptRunService {
     if (run.createdBy && run.createdBy === userId) {
       throw new ConflictException('Vier-Augen-Prinzip: Der Ersteller eines Laufs kann ihn nicht selbst freigeben.');
     }
+    // I-34: a closed month is frozen — its run can no longer be approved/booked.
+    await this.assertNotClosed(run.periode);
 
     const summary = (run.fachkonzeptZusammenfassung ?? {}) as {
       repSummaries?: FachkonzeptRunResult['repSummaries'];
@@ -252,32 +262,78 @@ export class FachkonzeptRunService {
 
     const where = organisationId ? { organisationId } : {};
     const allContracts = await this.contractRepo.find({ where });
-    const contracts: RunContract[] = allContracts
-      // I-11: data-quality-gated contracts get no automatic booking until the
-      // flagged record is corrected (Fachkonzept ch. 11.1 „Datenqualität").
-      .filter((ct) => !ct.datenqualitaetGesperrt)
+    // I-11: data-quality-gated contracts get no automatic booking until the
+    // flagged record is corrected (Fachkonzept ch. 11.1 „Datenqualität").
+    const bookable = allContracts.filter((ct) => !ct.datenqualitaetGesperrt);
+    const contracts: RunContract[] = bookable
       .filter((ct) => (ct.erfassungsdatum ?? '').startsWith(periode))
-      .map((ct) => {
-        const isGas = ct.tariffEnergyType === TariffEnergyType.Gas;
-        const surcharge = isGas ? ct.rateExtraProfitProvisionGp : ct.rateExtraProfitProvision;
-        return {
-          id: ct.id,
-          repId: ct.repId,
-          status: ct.status,
-          clientType: ct.clientType,
-          startDeliveryType: ct.startDeliveryType,
-          energie: ct.tariffEnergyType,
-          verbrauch: ct.verbrauch,
-          gesamtverbrauch: num(ct.previousVolume) ?? ct.verbrauch,
-          surchargeCt: num(surcharge),
-          swaRevenue: num(ct.swaZahlbetrag),
-          actualSwaProvision: num(ct.tatsaechlicheSwaProvision) ?? num(ct.swaGesamtprovision),
-          kreditcheckConfirmed: !!ct.kreditcheckDatum,
-          lieferbeginnConfirmed: !!ct.lieferbeginn,
-        };
-      });
+      .map((ct) => this.toRunContract(ct));
 
-    return computeFachkonzeptRun({ periode, config, reps: runReps, contracts });
+    // I-34/I-17: contracts whose original month is already closed are frozen
+    // there; if such a contract only became commissionable afterwards it is
+    // booked in this open month as an addendum referencing the original month.
+    const addenda = await this.collectAddenda(periode, bookable);
+
+    return computeFachkonzeptRun({ periode, config, reps: runReps, contracts, addenda });
+  }
+
+  /** Normalize a contract row into exactly what the engine consumes. */
+  private toRunContract(ct: Contract): RunContract {
+    const isGas = ct.tariffEnergyType === TariffEnergyType.Gas;
+    const surcharge = isGas ? ct.rateExtraProfitProvisionGp : ct.rateExtraProfitProvision;
+    return {
+      id: ct.id,
+      repId: ct.repId,
+      status: ct.status,
+      clientType: ct.clientType,
+      startDeliveryType: ct.startDeliveryType,
+      energie: ct.tariffEnergyType,
+      verbrauch: ct.verbrauch,
+      gesamtverbrauch: num(ct.previousVolume) ?? ct.verbrauch,
+      surchargeCt: num(surcharge),
+      swaRevenue: num(ct.swaZahlbetrag),
+      // I-36: a manual override takes precedence as the booking value; the
+      // original SWA figures stay visible on the contract (never overwritten).
+      actualSwaProvision:
+        num(ct.manuellerOverride) ?? num(ct.tatsaechlicheSwaProvision) ?? num(ct.swaGesamtprovision),
+      kreditcheckConfirmed: !!ct.kreditcheckDatum,
+      lieferbeginnConfirmed: !!ct.lieferbeginn,
+    };
+  }
+
+  /**
+   * Addendum candidates for the open `periode` (I-34/I-17): non-gated contracts
+   * whose capture month is an earlier, already-closed month and that were not yet
+   * booked in any closed month. They are booked now, tagged with the original
+   * (frozen) month + SWA order number, without reopening the closed month.
+   */
+  private async collectAddenda(periode: string, bookable: Contract[]): Promise<AddendumContract[]> {
+    const closed = await this.monthCloseRepo.find({ where: { status: 'geschlossen' } });
+    if (closed.length === 0) return [];
+    const closedPeriods = new Set(closed.map((c) => c.periode));
+    const alreadyBooked = new Set<string>();
+    for (const c of closed) for (const id of c.gebuchteVertragIds ?? []) alreadyBooked.add(id);
+
+    return bookable
+      .filter((ct) => {
+        const monat = (ct.erfassungsdatum ?? '').slice(0, 7);
+        return monat && monat < periode && closedPeriods.has(monat) && !alreadyBooked.has(ct.id);
+      })
+      .map((ct) => ({
+        ...this.toRunContract(ct),
+        urspruungsMonat: (ct.erfassungsdatum ?? '').slice(0, 7),
+        swaOrderNumber: ct.swaOrderNumber ?? null,
+      }));
+  }
+
+  /** I-34: reject any run mutation on a frozen (closed) month. */
+  private async assertNotClosed(periode: string): Promise<void> {
+    const row = await this.monthCloseRepo.findOne({ where: { periode } });
+    if (row && row.status === 'geschlossen') {
+      throw new ConflictException(
+        `Monat ${periode} ist abgeschlossen (eingefroren). Spätere SWA-Informationen erscheinen als Nachtrag im laufenden Monat.`,
+      );
+    }
   }
 
   private periodEnd(periode: string): string {

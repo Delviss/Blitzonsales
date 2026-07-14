@@ -1,11 +1,13 @@
 import * as React from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
+  AlertTriangle,
   Bell,
   BookOpen,
   Building2,
   CalendarClock,
   LayoutGrid,
+  Lock,
   LifeBuoy,
   LineChart,
   LogOut,
@@ -158,7 +160,9 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, roles: PHASE1_READ },
       { to: '/forecast', label: 'Live-Prognose', icon: LineChart, roles: PHASE1_READ },
+      { to: '/warnungen', label: 'Warnungen', icon: AlertTriangle, roles: PHASE1_READ },
       { to: '/provisionslaeufe', label: 'Provisionsläufe', icon: Wallet, roles: PHASE1_READ },
+      { to: '/monatsabschluss', label: 'Monatsabschluss', icon: Lock, roles: PHASE1_READ },
       { to: '/stornokonten', label: 'Stornokonten', icon: PiggyBank, roles: PHASE1_READ },
       { to: '/wiedervorlagen', label: 'Wiedervorlagen', icon: CalendarClock, roles: PHASE1_READ },
       { to: '/import', label: 'Import', icon: Upload, roles: PHASE1_OPS },
