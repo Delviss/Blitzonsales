@@ -284,4 +284,68 @@ describe('BlitzON Control (e2e)', () => {
       .reduce((sum: number, l: any) => sum + l.betrag, 0);
     expect(Math.round(frozenLinesSum * 100) / 100).toBe(res.body.kpis.netCommission);
   });
+
+  // --- Wave 3 · data ingestion (I-08…I-12) ---------------------------------
+
+  it('imports a Joules export through the shared upsert, archives it raw, and gates a bad row (I-10/I-11/I-12)', async () => {
+    const csv =
+      'Joules-ID;Verkäufer;Status;Kunde;Verbrauch\n' +
+      'SWG-E2E-1;Sean Tyler Kreuzer;In Belieferung;Muster;3200\n' +
+      'SWG-E2E-2;Unbekannter Verkaeufer;In Belieferung;Zweit;2100\n';
+    const res = await request(app.getHttpServer())
+      .post('/api/import')
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .attach('file', Buffer.from(csv, 'utf8'), 'joules.csv');
+    expect(res.status).toBe(201);
+    expect(res.body.erstellt + res.body.aktualisiert).toBe(2);
+    // the unknown-rep row is flagged
+    expect(res.body.fehler.length).toBeGreaterThan(0);
+
+    // I-10: the raw file is archived byte-for-byte and inspectable
+    const archive = await request(app.getHttpServer()).get('/api/ingestion/archive').set('Authorization', `Bearer ${adminToken}`);
+    expect(archive.status).toBe(200);
+    const entry = archive.body.find((a: any) => a.referenz === 'joules.csv');
+    expect(entry).toBeDefined();
+    const raw = await request(app.getHttpServer()).get(`/api/ingestion/archive/${entry.id}/raw`).set('Authorization', `Bearer ${adminToken}`);
+    expect(raw.status).toBe(200);
+    expect(raw.text).toContain('SWG-E2E-1');
+
+    // I-11: the data-quality view surfaces the unknown rep and the gated contract
+    const dq = await request(app.getHttpServer()).get('/api/data-quality').set('Authorization', `Bearer ${adminToken}`);
+    expect(dq.status).toBe(200);
+    expect(dq.body.unbekannteVerkaeufer).toContain('Unbekannter Verkaeufer');
+    expect(dq.body.gesperrteVertraege).toBeGreaterThan(0);
+  });
+
+  it('imports an SWA settlement list keyed on the order number (I-12)', async () => {
+    const csv = 'Auftragsnummer;Provision;Zahlbetrag\nSWG-E2E-1;160,00;80,00\n';
+    const res = await request(app.getHttpServer())
+      .post('/api/import/abrechnung')
+      .set('Authorization', `Bearer ${backofficeToken}`)
+      .attach('file', Buffer.from(csv, 'utf8'), 'abrechnung.csv');
+    expect(res.status).toBe(201);
+    expect(res.body.aktualisiert).toBe(1);
+  });
+
+  it('reports the Joules sync as not configured and completes a blocked run (I-08/I-09)', async () => {
+    const status = await request(app.getHttpServer()).get('/api/sync/status').set('Authorization', `Bearer ${adminToken}`);
+    expect(status.status).toBe(200);
+    expect(status.body.konfiguriert).toBe(false);
+
+    const run = await request(app.getHttpServer()).post('/api/sync/joules').set('Authorization', `Bearer ${backofficeToken}`).send({});
+    expect(run.status).toBe(201);
+    expect(run.body.status).toBe('nicht_konfiguriert');
+
+    const runs = await request(app.getHttpServer()).get('/api/sync/runs').set('Authorization', `Bearer ${readonlyToken}`);
+    expect(runs.status).toBe(200);
+    expect(runs.body.length).toBeGreaterThan(0);
+  });
+
+  it('produces a historical migration at-risk report (I-12)', async () => {
+    const res = await request(app.getHttpServer()).get('/api/import/at-risk').set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('erforderlich');
+    expect(res.body).toHaveProperty('archivierbar');
+    expect(Array.isArray(res.body.auftraege)).toBe(true);
+  });
 });

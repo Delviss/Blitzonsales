@@ -49,6 +49,16 @@ export class StatusMasterService {
     return codes.includes(code);
   }
 
+  /**
+   * Every status code released (in any state) as-of a date — the set of *known*
+   * statuses. Used by the ingestion data-quality check (I-11) to flag a status
+   * that is absent from the master as invalid.
+   */
+  async knownCodes(asOf: string): Promise<string[]> {
+    const resolved = await this.resolveAsOf(asOf);
+    return resolved.map((s) => s.code);
+  }
+
   /** All rows (every version), newest valid-from first, for the admin surface. */
   async findAll(): Promise<StatusMaster[]> {
     return this.repo.find({ order: { code: 'ASC', gueltigAb: 'DESC' } });

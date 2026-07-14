@@ -65,16 +65,62 @@ export function normalizeHeader(header: string): string {
     .replace(/[^a-z0-9]/g, '');
 }
 
-/** Maps raw column headers to canonical field names, first match wins. */
-export function buildHeaderMap(rawHeaders: string[]): Map<CanonicalField, string> {
-  const map = new Map<CanonicalField, string>();
+/** Maps raw headers to a field/alias table, first match wins. Generic helper. */
+export function matchHeaders<F extends string>(
+  rawHeaders: string[],
+  aliases: Record<F, string[]>,
+): Map<F, string> {
+  const map = new Map<F, string>();
   const normalizedToRaw = rawHeaders.map(h => ({ raw: h, normalized: normalizeHeader(h) }));
-  for (const field of CANONICAL_FIELDS) {
-    const aliases = HEADER_ALIASES[field];
-    const match = normalizedToRaw.find(h => aliases.includes(h.normalized));
+  for (const field of Object.keys(aliases) as F[]) {
+    const match = normalizedToRaw.find(h => aliases[field].includes(h.normalized));
     if (match) map.set(field, match.raw);
   }
   return map;
+}
+
+/** Maps raw column headers to canonical field names, first match wins. */
+export function buildHeaderMap(rawHeaders: string[]): Map<CanonicalField, string> {
+  return matchHeaders(rawHeaders, HEADER_ALIASES);
+}
+
+// --- I-12 · SWA settlement list (Abrechnungsliste) ---------------------------
+// The SWA commission list arrives as its own Excel/CSV: order number + the
+// actually-booked commission. It is keyed on the SWA order number and only
+// updates the actual-commission fields (the booking truth for the I-14 control).
+
+export const SETTLEMENT_FIELDS = ['swaOrderNumber', 'swaGesamtprovision', 'swaZahlbetrag', 'status'] as const;
+export type SettlementField = (typeof SETTLEMENT_FIELDS)[number];
+
+export interface SettlementRow {
+  swaOrderNumber: string | null;
+  swaGesamtprovision: number | null;
+  swaZahlbetrag: number | null;
+  status: string | null;
+}
+
+const SETTLEMENT_ALIASES: Record<SettlementField, string[]> = {
+  swaOrderNumber: ['auftragsnummer', 'swaauftragsnummer', 'ordernumber', 'vertragsnummer', 'joulesid', 'joulesid', 'id', 'antragsnummer', 'swaordernumber'],
+  swaGesamtprovision: ['provision', 'gesamtprovision', 'swaprovision', 'provisionsbetrag', 'courtage', 'betrag'],
+  swaZahlbetrag: ['zahlbetrag', 'auszahlung', 'ausgezahlt', 'zahlung', 'auszahlbetrag'],
+  status: ['status', 'vertragsstatus', 'abrechnungsstatus'],
+};
+
+export function buildSettlementHeaderMap(rawHeaders: string[]): Map<SettlementField, string> {
+  return matchHeaders(rawHeaders, SETTLEMENT_ALIASES);
+}
+
+export function mapSettlementRow(raw: Record<string, unknown>, headerMap: Map<SettlementField, string>): SettlementRow {
+  const get = (field: SettlementField) => {
+    const header = headerMap.get(field);
+    return header === undefined ? null : raw[header];
+  };
+  return {
+    swaOrderNumber: str(get('swaOrderNumber')),
+    swaGesamtprovision: parseNumberValue(get('swaGesamtprovision')),
+    swaZahlbetrag: parseNumberValue(get('swaZahlbetrag')),
+    status: str(get('status')),
+  };
 }
 
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);

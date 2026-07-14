@@ -232,6 +232,9 @@ export class FachkonzeptRunService {
     const where = run.organisationId ? { organisationId: run.organisationId } : {};
     const allContracts = await this.contractRepo.find({ where });
     const contracts: RunContract[] = allContracts
+      // I-11: data-quality-gated contracts get no automatic booking until the
+      // flagged record is corrected (Fachkonzept ch. 11.1 „Datenqualität").
+      .filter((ct) => !ct.datenqualitaetGesperrt)
       .filter((ct) => (ct.erfassungsdatum ?? '').startsWith(run.periode))
       .map((ct) => {
         const isGas = ct.tariffEnergyType === TariffEnergyType.Gas;

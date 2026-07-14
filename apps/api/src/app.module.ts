@@ -17,6 +17,8 @@ import { DatenschutzModule } from './datenschutz/datenschutz.module';
 import { ConfigStoreModule } from './config-store/config-store.module';
 import { StatusMasterModule } from './status-master/status-master.module';
 import { PostingObjectsModule } from './posting-objects/posting-objects.module';
+import { IngestionModule } from './ingestion/ingestion.module';
+import { JoulesModule } from './joules/joules.module';
 
 @Module({
   imports: [
@@ -48,6 +50,8 @@ import { PostingObjectsModule } from './posting-objects/posting-objects.module';
     ConfigStoreModule,
     StatusMasterModule,
     PostingObjectsModule,
+    IngestionModule,
+    JoulesModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

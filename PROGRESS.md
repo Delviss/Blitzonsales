@@ -297,6 +297,86 @@ storno-account math are unit-tested with mocked repos
 (`test/posting-objects.service.spec.ts`); the e2e suite drives the storno/reserve
 posting objects on freigabe and a full clawback offset cycle.
 
+## Wave 3 (Data ingestion, Epic P2) — I-08 / I-09 / I-10 / I-11 / I-12
+
+The parallel ingestion track. Two channels — the Joules/SWA API and Excel/CSV
+uploads — now funnel through one shared, immutable, data-quality-gated write
+path. I-08 is **externally blocked** on a BlitzON test-tenant credential, so the
+Excel path (I-12) is the interim source and nothing else is gated on the API.
+
+**I-10/I-11 shared ingestion backbone (`apps/api/src/ingestion/`):** the cross-
+channel core. `IngestionArchiveService` (+ `ingestion_archive`) stores a
+byte-for-byte raw copy with a SHA-256 of every API fetch and every file import
+(I-10, ch. 12.2), served back verbatim via `GET /api/ingestion/archive(/:id/raw)`.
+`ContractUpsertService` is the single write path (I-11): it upserts **keyed on the
+SWA order number** (falling back to the Joules id) so a returning order updates
+the contract as a new version — never a duplicate — appends an append-only status
+event on every status change and a `swa_actual` financial event on a changed
+actual commission (I-03), and runs the pure data-quality classifier
+(`ingestion-validation.ts`, unit-tested). A record with a hard problem (missing
+order number, unknown/absent rep, unknown org, missing commercial term,
+invalid/absent surcharge, invalid status) is routed to the `ingestion_error` list
+and the contract is **gated** (`contract.datenqualitaet_gesperrt`) — the
+Fachkonzept run skips gated contracts, so a flagged record gets no automatic
+booking until it is corrected. An unverifiable SWA figure is surfaced but does
+not block (the I-14 plausibility control still books the expected value).
+`DataQualityService` (`GET /api/data-quality`) surfaces the last sync, open error
+rows, unknown reps/orgs, unassignable orders and the gated-contract count.
+
+**I-08 Joules/SWA API client (`apps/api/src/joules/joules-client.ts` + schemas +
+mapper):** a typed `fetch`-based client for the RESTful API v2 (base
+`https://service.billig-will-ich.de/service/v2`) with configurable HTTP-Basic /
+`api-key` auth, retries with exponential backoff on 5xx/network errors and
+rate-limit (429) handling that honours `Retry-After`. Read endpoints:
+`/clients/ids/{status}`, `/clients/{id}`, `/clients/{id}/status`,
+`/consumption/{id}`, `/cancellation/{id}`,
+`/organizations/{id}/commissionsettings`, statuses. A pure mapper
+(`joules-mapper.ts`, unit-tested) translates the ClientSchema (+ consumption +
+cancellation) into the shared upsert record; a present cancellation overrides the
+status to Storno so reversals surface. The client is env-configured
+(`JOULES_*`); with no credential it is *not configured* rather than throwing.
+Retry, rate-limit, auth-header and mapper behaviour are unit-tested with an
+injected `fetch`/`sleep`.
+
+**I-09 sync job (`joules-sync.service.ts` + controller + scheduler):** a delta
+sync driven by `GET /clients/ids/{status}` across the known status set — fetch
+each client + consumption (+ cancellation, tolerating a 404), map, archive the
+raw payloads (I-10), then upsert idempotently through the shared write path
+(I-11). Each run records what changed in a `sync_run` row (the "last sync"
+surface). On-demand via `POST /api/sync/joules`; an opt-in interval scheduler
+(`JOULES_SYNC_ENABLED`, off by default) covers the scheduled case without a new
+dependency. With no credential a run completes as `nicht_konfiguriert` with a
+clear message. Orchestration is unit-tested with a mocked client.
+
+**I-12 Excel/settlement fallback + historical migration (`apps/api/src/import/`):**
+the existing Excel/CSV contract import now archives the raw file (I-10) and
+funnels through `ContractUpsertService`, so the fallback path archives, upserts by
+order number and gates exactly like the API. A new **settlement-list** import
+(`POST /api/import/abrechnung`, `import-normalizer` alias set) takes the SWA
+commission list keyed on the order number, writes the actual commission (the I-14
+booking truth) and appends a `swa_actual` financial event; unmatched orders are
+reported for reconciliation. A pure at-risk classifier
+(`historical-migration.ts`, unit-tested) implements the ch. 4.2 migration set —
+private within the 6-month storno window; commercial with an open 2nd SWA half,
+open retention, open reserve or possible under-consumption — exposed as
+`GET /api/import/at-risk` (required set vs. archive-only) so go-live can prove the
+required historical set reconciles.
+
+Web: a new **Datenqualität** page (`/datenqualitaet`) shows the last sync, the
+gated-contract / open-error counts, the error categories and the error list, with
+an on-demand "Jetzt synchronisieren" action (and the not-configured hint).
+Migration `1722211200000-Wave3Ingestion.ts` adds `ingestion_archive`,
+`ingestion_error`, `sync_run` and the two `contract` columns. Coverage: pure
+unit tests for the validation classifier, the Joules client (retry/rate-limit/
+auth), the mapper, the sync orchestrator and the at-risk classifier; the e2e
+suite drives a Joules-export import (archive + gating + data-quality view), a
+settlement-list import, the not-configured sync run and the at-risk report.
+
+**Still to build (Phase 1 remainder):** the master-data admin UI polish (I-07 is
+done), the Founder dashboard & drill-downs (P6), CRM/lead-time follow-up (P7),
+month-end close & the warning system (P8). I-08's live authentication remains
+blocked on the BlitzON test-tenant credential (see open question 6).
+
 ## Open Questions
 
 1. **Resolved (assumption)**: `erfassungsdatum` missing/serial-0 defaults to the import
@@ -346,4 +426,18 @@ posting objects on freigabe and a full clawback offset cycle.
     `tatsaechliche_swa_provision` (falling back to `swa_gesamtprovision`); until the Joules/SWA
     booking-list sync exists (P2), that actual must be imported/entered manually, so most
     contracts show `offen` rather than `ok`/`abweichung` on a fresh run. The intermediate SWA
-    tier steps between the documented anchors remain placeholders (versioned config).
+    tier steps between the documented anchors remain placeholders (versioned config). The
+    settlement-list import (I-12, `POST /api/import/abrechnung`) is now the fallback way to load
+    the actual figures until the API sync is live.
+14. **Still open (I-08, externally blocked)**: the Joules API client's field names
+    (`joules-schemas.ts`) mirror the I-02 ClientSchema extension but are best-effort pending the
+    authoritative `doc.yaml` and a test-tenant credential (the host may also need allow-listing).
+    Everything is optional so a partial/unexpected payload still maps; the field mapper is the one
+    place to adjust when the real schema lands. No credential ⇒ the sync reports
+    `nicht_konfiguriert` and the Excel path stays the source.
+15. **Still open (I-11, assumption)**: an *unverifiable* SWA commission (no actual figure yet, or a
+    deviation beyond tolerance) is surfaced in the data-quality list but does **not** block booking
+    — the expected tier value still books per the I-14 plausibility control. Only hard data problems
+    (missing order number, unknown/absent rep, unknown org, missing commercial term, invalid
+    surcharge/status) gate a contract from automatic booking. Confirm this split against the
+    Fachkonzept before go-live.

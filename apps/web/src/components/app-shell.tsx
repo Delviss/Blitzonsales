@@ -156,6 +156,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, roles: PHASE1_READ },
       { to: '/provisionslaeufe', label: 'Provisionsläufe', icon: Wallet, roles: PHASE1_READ },
       { to: '/import', label: 'Import', icon: Upload, roles: PHASE1_OPS },
+      { to: '/datenqualitaet', label: 'Datenqualität', icon: ShieldCheck, roles: PHASE1_READ },
     ],
   },
   {
