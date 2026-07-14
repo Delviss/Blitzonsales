@@ -5,6 +5,7 @@ import { CommissionRun } from '../entities/commission-run.entity';
 import { CommissionLine } from '../entities/commission-line.entity';
 import { Contract } from '../entities/contract.entity';
 import { SalesRep } from '../entities/sales-rep.entity';
+import { MonthClose } from '../entities/month-close.entity';
 import { CommissionRulesService } from './commission-rules.service';
 import { CommissionRulesController } from './commission-rules.controller';
 import { CommissionRunsService } from './commission-runs.service';
@@ -18,7 +19,7 @@ import { PostingObjectsModule } from '../posting-objects/posting-objects.module'
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([CommissionRule, CommissionRun, CommissionLine, Contract, SalesRep]),
+    TypeOrmModule.forFeature([CommissionRule, CommissionRun, CommissionLine, Contract, SalesRep, MonthClose]),
     AuditModule,
     ConfigStoreModule,
     StatusMasterModule,
