@@ -10,6 +10,7 @@ import ProvisionsregelnPage from './pages/verwaltung/ProvisionsregelnPage';
 import ProvisionslaeufePage from './pages/ProvisionslaeufePage';
 import ProvisionslaufDetailPage from './pages/ProvisionslaufDetailPage';
 import ImportPage from './pages/ImportPage';
+import DataQualityPage from './pages/DataQualityPage';
 import { AppShell } from './components/app-shell';
 import { Dashboard } from './components/dashboard';
 import { getUser } from './lib/auth';
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="provisionslaeufe" element={<ProvisionslaeufePage />} />
         <Route path="provisionslaeufe/:id" element={<ProvisionslaufDetailPage />} />
         <Route path="import" element={<ImportPage />} />
+        <Route path="datenqualitaet" element={<DataQualityPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

@@ -139,4 +139,20 @@ export class Contract {
   /** Manual override value; the original SWA value stays visible (I-36). */
   @Column({ name: 'manueller_override', type: 'numeric', precision: 12, scale: 2, nullable: true })
   manuellerOverride: number | null;
+
+  // --- I-10/I-11 · Wave 3 ingestion tracking (Fachkonzept ch. 11.1 / 12.1) ---
+
+  /** Where this contract was last ingested from: import | sync | manual. */
+  @Column({ name: 'ingest_quelle', nullable: true })
+  ingestQuelle: string | null;
+
+  /**
+   * Data-quality gate (I-11): set when the record was routed to the error list
+   * (missing order number, unknown rep/org, missing commercial term, invalid
+   * surcharge/status, unverifiable SWA commission). A gated contract gets no
+   * automatic booking — the Fachkonzept run skips it until the flag is cleared
+   * by a clean re-ingestion.
+   */
+  @Column({ name: 'datenqualitaet_gesperrt', type: 'boolean', nullable: false, default: false })
+  datenqualitaetGesperrt: boolean;
 }
