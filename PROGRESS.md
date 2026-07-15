@@ -564,6 +564,55 @@ months + referenced addenda, and a present free-operating-liquidity headline wit
 the warning counts. Each criterion reports met/unmet with concrete evidence; the
 web page renders the checklist with a met/total badge.
 
+## Joules API alignment (post-Wave 6) — I-08 against the authoritative doc.yaml
+
+The authoritative *Joules RESTful API v2* OpenAPI spec (`doc.yaml`, einsundnull)
+arrived and the best-effort client models were rewritten against it
+(`apps/api/src/joules/`). What changed:
+
+- **`joules-schemas.ts`** now mirrors the real *nested* ClientSchema
+  (`contractData` / `salesData` / `productData` / `switchData` / `customerData`
+  / `locationData`) instead of the guessed flat shape, plus typed
+  ClientIdSchema / ClientStatusSchema / ConsumptionSchema (array response) /
+  CancellationSchema (array response, `open…done` status lifecycle) /
+  UserSchema / OrganizationSchema. The integer enums are decoded by pure
+  helpers: `client_type` (0 privat / 1 gewerbe; WEG/Industry keep distinct
+  labels so they gate instead of silently running the Gewerbe engine),
+  `tariff_energy_type` (0 gas / 1 strom; other product types surface),
+  `start_delivery_type` (0/1 → neukunde, 2 → bestandskunde) and
+  `tariff_contract_period(+units)` → months.
+- **`joules-mapper.ts`** maps the nested payload: SWA order number =
+  `contractData.order_id` (fallback `contract_nr`; precedence to confirm on the
+  live tenant), status classified from `status_label` via the shared resolver,
+  delivery start = `confirmed_delivery_start` ?? `switchData.start_delivery`,
+  Vorvertrag-Ende = `switchData.self_terminated_date`, capture date =
+  `productData.pricing_date` ?? export timestamp (no creation date in the
+  schema), surcharges from `rate_extra_profit_provision(_gp)`, latest
+  consumption period wins. Only an **approved/done** cancellation flips the
+  status to Storno (open/denied/retention never do).
+- **Money truth**: the API exposes **no paid-SWA-commission fields** anywhere
+  (only `POST /commission/{id}` corrections + org commission settings), so the
+  mapper never writes `swa_gesamtprovision`/`tatsaechliche_swa_provision` — the
+  settlement-list import (I-12, `POST /api/import/abrechnung`) remains the
+  booking-truth source even with the API sync live.
+- **`joules-client.ts`**: `/consumption/{id}` and `/cancellation/{id}` return
+  arrays; the status catalogue is fetched with the **OPTIONS** method (and
+  returns names only); new `GET /user/{id}` / `GET /organizations/{id}` lookups.
+- **`joules-sync.service.ts`**: the id-list endpoint takes the **numeric Joules
+  status id**, and since the catalogue exposes no ids, the sweep is configured
+  via `JOULES_STATUS_IDS` (comma-separated; without it a run completes
+  `nicht_konfiguriert` with a pointer). The payload carries only
+  `salesData.user_id`/`organization_id`, so the sync resolves rep/org **names**
+  through the lookup endpoints (cached per run; a 404/403 yields null and the
+  record gates as unknown rep/org per I-11 instead of failing the run).
+
+Coverage: mapper/decoder/client/sync unit suites rewritten against realistic
+nested payloads (29 tests), full API unit suite (235) and the HTTP e2e suite
+(26, real Postgres) green. Still pending before the sync can go live: a
+test-tenant credential (I-08 external block), the tenant's real status ids for
+`JOULES_STATUS_IDS`, and confirming the `order_id` vs `contract_nr` precedence
+against a live payload.
+
 ## Open Questions
 
 1. **Resolved (assumption)**: `erfassungsdatum` missing/serial-0 defaults to the import
@@ -581,8 +630,12 @@ web page renders the checklist with a met/total badge.
    column spec from the accountant before go-live. The export path is now built behind an
    `AccountingExporter` interface (`apps/api/src/commissions/export/`) specifically so the
    real DATEV mapping can be dropped in later without touching the controller/service.
-6. **Still open**: whether a Joules API exists, or CSV/Excel upload (current implementation)
-   remains the permanent integration path.
+6. **Partially resolved**: the Joules API exists — the authoritative OpenAPI spec
+   (`doc.yaml`, "Joules RESTful API v2") was supplied and the client/mapper/sync are now
+   built against it (see "Joules API alignment" above). Still needed to switch it on: a
+   test-tenant credential and the tenant's numeric status ids (`JOULES_STATUS_IDS`).
+   Regardless of the API, the monthly SWA settlement list (I-12 import) stays the source
+   of the paid commission — the API carries no payout figures.
 7. **Still open**: the contract status that indicates commission is "finally paid" versus a
    provisional booking; the current engine treats `ZAEHLT_STATUS` as commission-eligible
    without a separate "settled" concept.
@@ -616,12 +669,13 @@ web page renders the checklist with a met/total badge.
     tier steps between the documented anchors remain placeholders (versioned config). The
     settlement-list import (I-12, `POST /api/import/abrechnung`) is now the fallback way to load
     the actual figures until the API sync is live.
-14. **Still open (I-08, externally blocked)**: the Joules API client's field names
-    (`joules-schemas.ts`) mirror the I-02 ClientSchema extension but are best-effort pending the
-    authoritative `doc.yaml` and a test-tenant credential (the host may also need allow-listing).
-    Everything is optional so a partial/unexpected payload still maps; the field mapper is the one
-    place to adjust when the real schema lands. No credential ⇒ the sync reports
-    `nicht_konfiguriert` and the Excel path stays the source.
+14. **Resolved (schemas) / still blocked (credential)**: the authoritative `doc.yaml`
+    landed and `joules-schemas.ts`/`joules-mapper.ts` were rewritten against the real
+    nested ClientSchema (see "Joules API alignment" above). Remaining before live sync:
+    a test-tenant credential (the host may also need allow-listing), the tenant's numeric
+    status ids for `JOULES_STATUS_IDS`, and confirming on a live payload that
+    `contractData.order_id` (not `contract_nr`) is the SWA order number. No credential ⇒
+    the sync reports `nicht_konfiguriert` and the Excel path stays the source.
 15. **Still open (I-11, assumption)**: an *unverifiable* SWA commission (no actual figure yet, or a
     deviation beyond tolerance) is surfaced in the data-quality list but does **not** block booking
     — the expected tier value still books per the I-14 plausibility control. Only hard data problems

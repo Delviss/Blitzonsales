@@ -3,10 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SyncRun } from '../entities/sync-run.entity';
 import { AuditModule } from '../audit/audit.module';
-import { StatusMasterModule } from '../status-master/status-master.module';
 import { IngestionModule } from '../ingestion/ingestion.module';
 import { JoulesApiClient, JoulesCredential } from './joules-client';
-import { JOULES_CLIENT } from './joules.tokens';
+import { JOULES_CLIENT, JOULES_STATUS_IDS } from './joules.tokens';
 import { JoulesSyncService } from './joules-sync.service';
 import { JoulesSyncController } from './joules-sync.controller';
 import { JoulesSyncScheduler } from './joules-sync.scheduler';
@@ -27,6 +26,15 @@ function credentialFromEnv(config: ConfigService): JoulesCredential {
   return { mode: 'none' };
 }
 
+/** Parse `JOULES_STATUS_IDS` (comma-separated numeric Joules status ids, e.g.
+ * "3,5,12") — the delta sync sweeps `GET /clients/ids/{status}` per id. */
+function statusIdsFromEnv(config: ConfigService): string[] {
+  return (config.get<string>('JOULES_STATUS_IDS') ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s !== '');
+}
+
 /**
  * Joules / SWA integration (Epic P2, I-08 client + I-09 sync). The API client is
  * provided as a value built from env; with no credential it is a not-configured
@@ -34,7 +42,7 @@ function credentialFromEnv(config: ConfigService): JoulesCredential {
  * Excel path (I-12) stays the interim source.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([SyncRun]), AuditModule, StatusMasterModule, IngestionModule],
+  imports: [TypeOrmModule.forFeature([SyncRun]), AuditModule, IngestionModule],
   providers: [
     {
       provide: JOULES_CLIENT,
@@ -43,6 +51,11 @@ function credentialFromEnv(config: ConfigService): JoulesCredential {
           baseUrl: config.get<string>('JOULES_BASE_URL') ?? DEFAULT_BASE_URL,
           credential: credentialFromEnv(config),
         }),
+      inject: [ConfigService],
+    },
+    {
+      provide: JOULES_STATUS_IDS,
+      useFactory: statusIdsFromEnv,
       inject: [ConfigService],
     },
     JoulesSyncService,
