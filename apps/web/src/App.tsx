@@ -12,6 +12,9 @@ import ProvisionslaufDetailPage from './pages/ProvisionslaufDetailPage';
 import ImportPage from './pages/ImportPage';
 import DataQualityPage from './pages/DataQualityPage';
 import ForecastPage from './pages/ForecastPage';
+import KennzahlenPage from './pages/KennzahlenPage';
+import DrilldownPage from './pages/DrilldownPage';
+import AkzeptanzPage from './pages/AkzeptanzPage';
 import WiedervorlagenPage from './pages/WiedervorlagenPage';
 import StornoKontenPage from './pages/StornoKontenPage';
 import WarnungenPage from './pages/WarnungenPage';
@@ -34,6 +37,9 @@ export default function App() {
       <Route path="/" element={<RequireAuth><AppShell /></RequireAuth>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="kennzahlen" element={<KennzahlenPage />} />
+        <Route path="drilldown" element={<DrilldownPage />} />
+        <Route path="akzeptanz" element={<AkzeptanzPage />} />
         <Route path="verwaltung/organisationen" element={<OrganisationenPage />} />
         <Route path="verwaltung/verkaeufer" element={<VerkaeuferPage />} />
         <Route path="verwaltung/produkte" element={<ProduktePage />} />

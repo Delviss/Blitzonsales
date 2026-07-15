@@ -24,6 +24,8 @@ import { ForecastModule } from './forecast/forecast.module';
 import { MonthCloseModule } from './month-close/month-close.module';
 import { OverrideModule } from './overrides/override.module';
 import { WarningsModule } from './warnings/warnings.module';
+import { FounderModule } from './founder/founder.module';
+import { AkzeptanzModule } from './akzeptanz/akzeptanz.module';
 
 @Module({
   imports: [
@@ -62,6 +64,8 @@ import { WarningsModule } from './warnings/warnings.module';
     MonthCloseModule,
     OverrideModule,
     WarningsModule,
+    FounderModule,
+    AkzeptanzModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

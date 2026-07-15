@@ -505,6 +505,95 @@ and the July-negative → August-positive contract booked only as an August
 addendum tagged with the frozen July month while a recompute of July stays
 byte-for-byte identical (I-34). A single CI gate.
 
+## Wave 6 (Surfacing + final gate) — I-27 / I-28 / I-29 / I-30 / I-37
+
+The Founder-facing surfacing layer of Epic P6 and the Phase-1 release gate of
+Epic P8. All figures are net by default; everything reuses the exact run
+computation (`FachkonzeptRunService.preview`) and the persisted posting objects
+so nothing on the dashboard diverges from the eventual booking. Two new modules
+(`apps/api/src/founder/`, `apps/api/src/akzeptanz/`), three new web pages, one
+shared net/gross labelling helper. No migration (read-only surfacing).
+
+**I-29 net presentation & gross-salary labelling (#50, ch. 2/18):** the
+cross-cutting UI convention applied as the Wave-6 views were built.
+`apps/web/src/components/NetLabels.tsx` is the single place the convention lives:
+`eurNet()` formats every KPI/drill-down euro value, `<NettoBadge>` marks a net
+section, `<BruttolohnBadge>`/`·brutto` unmistakably marks the only gross concept
+(guaranteed gross salary / Fixum basis — a payroll figure, never a VAT-gross
+amount), and `<NetHint>` carries the standing "alle Beträge netto" note at the
+top of each view. Every tile/table in the new pages is net; salary bases are
+labelled gross-salary; partner payouts are shown net.
+
+**I-27 Founder KPI tiles incl. free liquidity (#48, ch. 11.1):**
+`founder/kennzahlen.ts` holds the pure roll-ups (`computeFreeLiquidity`,
+`rollupEmployees`, `rollupPartners`, `rollupCommercial`, unit-tested in
+`kennzahlen.spec.ts`); `KennzahlenService` loads the live data (current + prior
++ YTD previews, storno-account total, commercial-reserve summary, open
+clawbacks, warnings counts, data-quality overview, versioned Fixum/employer-cost)
+and assembles the ch. 11.1 tiles: **SWA revenue** (current/prior/YTD, confirmed
+vs. expected), **new customers & SWA tier**, **internal employees** (commission,
+net payout, gross-salary basis, negative balance, employer cost, storno
+withholding, contribution margin), **partners** (revenue, net payout, open
+retention, BlitzON margin), **commercial** (total commission, 1st/2nd SWA
+halves, open retention, reserve target/actual, under-funding, risks),
+**warnings**, **data quality**, and — the anchor tile — **free operating
+liquidity**: confirmed SWA revenue minus due payouts, employer cost, the storno
+buffer, bound commercial reserves and open clawback receivables (reserves reduce
+free liquidity, ch. 18), with every component broken out so the figure is fully
+transparent. `GET /api/kennzahlen?periode=JJJJ-MM`, Founder/Backoffice/read-only;
+web page `/kennzahlen` (`KennzahlenPage.tsx`).
+
+**I-30 real-time / forecast view (#51, ch. 11.3, builds on I-16):** the Founder
+dashboard carries the live tier progress and the immediate financial impact of
+reversals. The KPI payload embeds an `echtzeit` block (from the existing
+`ForecastService`): the per-rep retroactive-staffel projection with next-threshold
+potential, the aggregate reversal impact and count, all explicitly
+`provisorisch: true`. Surfaced on `/kennzahlen` (a "vorläufig" banner + the live
+staffel table, each rep linking into its drill-down) with a link across to the
+full `/forecast` view; reversals/status changes after a sync show at once.
+
+**I-28 drill-downs to the SWA order number (#49, ch. 11.2/18):**
+`founder/drilldown.service.ts` + `GET /api/drilldown/{monat/:periode | rep/:repId
+| organisation/:orgId | vertrag/:contractId | ruecklagen}`. The single acceptance
+criterion is traceability, so every contract-level row every drill-down emits
+carries its `swaOrderNumber`, and the **contract** drill-down (the leaf) exposes
+the full append-only status + financial ledger history, the computed commission
+lines, reserves, clawbacks and CRM follow-ups keyed on that number. Month
+(volume, status split, SWA tier, expected vs. actual, payouts, corrections from
+the ledger), Rep (contracts, qualified new, tier, earnings, gross-salary basis,
+negative balance, storno account, retention, clawbacks, contribution),
+Organisation (contracts, SWA revenue, employee/partner cost, commercial claims,
+storno, reserves, BlitzON margin — explicitly no central fixed-cost allocation in
+Phase 1) and Reserves (storno accounts + commercial reserves per person / contract
+/ due date / use). Web page `/drilldown` (`DrilldownPage.tsx`, tabbed, deep-linkable
+via query params; SWA-order chips drill straight into the contract leaf).
+
+**I-37 export + 11 acceptance criteria (#58, ch. 18 — the release gate):**
+`GET /api/kennzahlen/export?periode=` writes the net KPI snapshot as a flat
+CSV (the run-level accounting/Excel/PDF exporters remain the per-contract path,
+reused unchanged). `apps/api/src/akzeptanz/` is the gate itself: `akzeptanz.ts`
+defines the 11 ch. 18 criteria as a pure, testable checklist (traceability to
+order number, SWA list as truth, net-by-default, no payout before confirmation,
+retroactive tiers pass, minimum/non-qualifying/existing handled, separate balance
+vs. storno account, reserves reduce free liquidity, clawbacks with offsetting
+order, immutable months + visible addenda, clear free operating liquidity + key
+warnings — each naming its implementing issue). `acceptance-18.spec.ts` pins that
+all 11 pass with the invariants met and that a regression flips exactly its
+criterion red. `AkzeptanzService` evaluates the checklist against live signals:
+the traceability criterion is checked against real data (no non-gated contract
+may be booked without an SWA order number) and the free-liquidity criterion
+re-derives the reserve-reducing figure; the structural invariants are additionally
+guarded by the CI acceptance suites (14.1/14.2/14.3, clawback-offset,
+month-close freeze). `GET /api/akzeptanz?periode=`; web page `/akzeptanz`
+(`AkzeptanzPage.tsx`, live red/green checklist). The e2e suite drives the KPI
+tiles (incl. the free-liquidity identity), the CSV export, the month drill-down's
+per-order traceability, the reserves drill-down, the 11-criteria gate and the
+RBAC confinement of all four surfaces.
+
+**Epics P1–P8 (#14–#21):** with I-27…I-30 and I-37 landed the Epic P6 (Founder
+dashboard) and Epic P8 (governance + release readiness) sub-issues are complete;
+the epics close as their remaining sub-issues do.
+
 ## Open Questions
 
 1. **Resolved (assumption)**: `erfassungsdatum` missing/serial-0 defaults to the import
@@ -577,3 +666,14 @@ byte-for-byte identical (I-34). A single CI gate.
     Confirm the addendum's tier treatment against ch. 14.1 before the first cross-month
     payout. I-35's SWA "control tier" is left unset (per-contract plausibility already
     flags SWA deviations); wire the authoritative control-tier value when supplied.
+17. **Still open (I-27, assumption)**: the **free operating liquidity** figure is
+    defined as confirmed SWA commission received minus due payouts, employer cost,
+    the storno-account buffer, bound (unreleased) commercial reserves and open
+    clawback receivables — every component is broken out on the tile so the number
+    is transparent. This treats the storno buffer and reserves as liquidity-reducing
+    liabilities (ch. 18) and uses the current month's confirmed SWA commission as the
+    single inflow. Confirm the exact inflow/obligation set (esp. whether prior-month
+    carryover cash and released reserves re-enter the figure) against the Fachkonzept
+    before it drives a real cash decision. Employer cost on partner payouts is treated
+    as nil (partners are not salaried); the KPI export is a net CSV snapshot, with the
+    per-contract accounting/Excel/PDF exporters unchanged as the booking export path.
