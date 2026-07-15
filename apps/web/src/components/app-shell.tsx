@@ -15,6 +15,7 @@ import {
   Moon,
   ListChecks,
   Package,
+  PieChart,
   PiggyBank,
   RotateCw,
   ScrollText,
@@ -159,6 +160,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Vertrieb',
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, roles: PHASE1_READ },
+      { to: '/founder-dashboard', label: 'Founder-Dashboard', icon: PieChart, roles: PHASE1_READ },
       { to: '/forecast', label: 'Live-Prognose', icon: LineChart, roles: PHASE1_READ },
       { to: '/warnungen', label: 'Warnungen', icon: AlertTriangle, roles: PHASE1_READ },
       { to: '/provisionslaeufe', label: 'Provisionsläufe', icon: Wallet, roles: PHASE1_READ },

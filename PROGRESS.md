@@ -505,6 +505,65 @@ and the July-negative → August-positive contract booked only as an August
 addendum tagged with the frozen July month while a recompute of July stays
 byte-for-byte identical (I-34). A single CI gate.
 
+## Wave 6 (Founder dashboard & reporting, Epic P6 + I-37) — I-27 / I-28 / I-29 / I-30 / I-37
+
+The Fachkonzept ch. 11 Founder start page and the ch. 18 export-readiness gate.
+A new `apps/api/src/founder-dashboard/` module composes the shared run
+computation (`FachkonzeptRunService.preview`, never a divergent number), the
+posting-object services (storno accounts, commercial reserves, clawbacks), the
+warning system, the forecast and the data-quality view into one **net-throughout**
+dashboard. Shipped with pure unit tests + HTTP e2e coverage; no new migration
+(read-only over existing tables). Web page `/founder-dashboard`.
+
+**I-27 Founder dashboard KPI tiles (#48, ch. 11.1):** `GET /api/founder-dashboard`
+returns every ch. 11.1 tile — SWA revenue net (confirmed vs. expected, prior
+month, YTD), net new customers & SWA tier (count, reached level, next threshold,
+deviations), internal employees (variable commission, net payout, gross-salary
+basis, employer cost, negative balance, storno account, clawbacks, contribution),
+partners (SWA revenue, net payout, open retention, BlitzON margin), commercial
+(total commission, confirmed 1st/2nd SWA halves, open retention, reserve
+target/actual, under-funding), warnings and data quality — plus the headline
+**free operating liquidity before central fixed costs**. The liquidity waterfall
+is a pure, unit-tested function (`founder-dashboard.ts`, `computeFounderDashboard`):
+a coherent single-period figure = confirmed SWA revenue − employee/partner net
+payouts − employer cost − the period's commercial reserve set-aside − the period's
+storno withholding, so reserves and the storno buffer explicitly reduce it.
+
+**I-28 drill-downs (#49, ch. 11.2):** `GET /api/founder-dashboard/drilldown/{monat,
+verkaeufer/:id, organisation/:id, vertrag/:id, ruecklagen}` — Month (volume, status
+split, SWA tier, expected vs. actual, payouts, corrections, per-line SWA order
+numbers); Rep (contracts, qualified new, tier, earnings, gross salary, employer
+cost, negative balance, storno account, clawbacks, contribution); Organisation
+(contracts, SWA revenue, payout, retention, reserves, BlitzON margin — no central
+fixed-cost allocation in Phase 1); Contract (full append-only status + financial
+history, SWA figures incl. override, reserves, clawbacks, delivery/contract-end
+dates); Reserves (storno accounts per person + commercial reserves per contract).
+Every view drills to the individual SWA order number (verified in e2e).
+
+**I-29 net presentation & gross-salary labelling (#50, ch. 2):** the dashboard
+result carries `nettoDarstellung: true`; every euro figure is net; the one payroll
+gross figure — the Fixum base-salary basis — is a distinct `bruttogehaltBasis`
+field, labelled „Bruttogehalts-Basis (brutto) · Lohn-Brutto" in the UI so it can
+never be read as a VAT-gross amount. Partner payouts are shown net.
+
+**I-30 real-time / forecast view (#51, ch. 11.3):** the dashboard attaches a live
+`realtime` section reusing `ForecastService` (I-16): running SWA-tier progress +
+next threshold, the per-rep provisional projection with the retroactive-switch
+uplift potential, and every Storno/Widerruf since the last sync surfaced at once
+with its financial impact — all explicitly marked provisional.
+
+**I-37 export & acceptance criteria (#58, ch. 17/18):** `GET
+/api/founder-dashboard/export?periode=` emits the KPI tiles as a BOM-prefixed
+semicolon CSV (Excel-friendly). `GET /api/founder-dashboard/akzeptanzkriterien`
+evaluates all **11 ch. 18 acceptance criteria** via a pure, unit-tested evaluator
+(`acceptance-18.ts`): traceability to the order number, SWA list as truth,
+net-by-default, no payout before confirmation, retroactive tiers, minimum/
+non-qualifying/existing handling, separate balance vs. storno accounts, reserves
+reduce free liquidity, clawbacks reconciling to Σ offsets + remainder, immutable
+months + referenced addenda, and a present free-operating-liquidity headline with
+the warning counts. Each criterion reports met/unmet with concrete evidence; the
+web page renders the checklist with a met/total badge.
+
 ## Open Questions
 
 1. **Resolved (assumption)**: `erfassungsdatum` missing/serial-0 defaults to the import

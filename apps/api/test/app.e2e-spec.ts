@@ -565,4 +565,77 @@ describe('BlitzON Control (e2e)', () => {
       .send({ periode: '2026-05' });
     expect(rerun.status).toBe(201);
   });
+
+  it('serves the Founder dashboard KPI tiles net throughout with the free-liquidity headline (I-27/I-29/I-30)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/founder-dashboard?periode=2026-05')
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.nettoDarstellung).toBe(true);
+    // ch. 11.1 tiles present
+    expect(res.body).toHaveProperty('swaRevenue');
+    expect(res.body).toHaveProperty('newCustomers');
+    expect(res.body).toHaveProperty('employees');
+    expect(res.body).toHaveProperty('partners');
+    expect(res.body).toHaveProperty('commercial');
+    expect(res.body).toHaveProperty('dataQuality');
+    // the headline free operating liquidity is a finite number
+    expect(res.body.freieBetriebsliquiditaet).toHaveProperty('freieBetriebsliquiditaet');
+    expect(Number.isFinite(res.body.freieBetriebsliquiditaet.freieBetriebsliquiditaet)).toBe(true);
+    // the base-salary tile is a gross figure (I-29); it exists and is numeric
+    expect(res.body.employees).toHaveProperty('bruttogehaltBasis');
+    // I-30: the live forecast section is attached and marked provisional
+    expect(res.body.realtime).toBeTruthy();
+    expect(res.body.realtime.provisorisch).toBe(true);
+  });
+
+  it('drills every dashboard figure down to the SWA order number (I-28)', async () => {
+    const monat = await request(app.getHttpServer())
+      .get('/api/founder-dashboard/drilldown/monat?periode=2026-05')
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(monat.status).toBe(200);
+    expect(monat.body).toHaveProperty('swaTier');
+    expect(Array.isArray(monat.body.zeilen)).toBe(true);
+    // every line carries the traceable SWA order number key
+    for (const z of monat.body.zeilen) expect(z).toHaveProperty('swaOrderNumber');
+
+    const reserves = await request(app.getHttpServer())
+      .get('/api/founder-dashboard/drilldown/ruecklagen')
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(reserves.status).toBe(200);
+    expect(reserves.body.stornokonten).toHaveProperty('gesamt');
+    expect(reserves.body.gewerbeRuecklagen).toHaveProperty('gesamt');
+
+    // a contract drill-down exposes the full append-only status history
+    const contracts = await request(app.getHttpServer())
+      .get('/api/vertraege')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const contractId = contracts.body[0].id;
+    const vertrag = await request(app.getHttpServer())
+      .get(`/api/founder-dashboard/drilldown/vertrag/${contractId}`)
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(vertrag.status).toBe(200);
+    expect(vertrag.body).toHaveProperty('swaOrderNumber');
+    expect(vertrag.body).toHaveProperty('statusHistorie');
+    expect(vertrag.body).toHaveProperty('finanzHistorie');
+  });
+
+  it('evaluates the 11 ch. 18 acceptance criteria and exports the KPIs (I-37)', async () => {
+    const crit = await request(app.getHttpServer())
+      .get('/api/founder-dashboard/akzeptanzkriterien?periode=2026-05')
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(crit.status).toBe(200);
+    expect(crit.body.gesamt).toBe(11);
+    expect(crit.body.kriterien).toHaveLength(11);
+    // criterion 8 (reserves reduce free liquidity) is evaluated
+    expect(crit.body.kriterien.find((k: any) => k.nr === 8)).toBeTruthy();
+
+    const csv = await request(app.getHttpServer())
+      .get('/api/founder-dashboard/export?periode=2026-05')
+      .set('Authorization', `Bearer ${readonlyToken}`);
+    expect(csv.status).toBe(200);
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.text).toContain('Freie Betriebsliquidität');
+    expect(csv.text).toContain('Bruttogehalts-Basis');
+  });
 });
