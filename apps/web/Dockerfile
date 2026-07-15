@@ -10,6 +10,10 @@ RUN npm ci -w @blitzon/shared -w @blitzon/web
 
 COPY packages/shared packages/shared
 COPY apps/web apps/web
+
+# Injected at build time by Railway (service variable) so the SPA calls the deployed API.
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build -w @blitzon/shared && npm run build -w @blitzon/web
 
 FROM nginx:1.27-alpine
