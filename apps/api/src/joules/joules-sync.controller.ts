@@ -10,11 +10,19 @@ import { JoulesSyncService } from './joules-sync.service';
 export class JoulesSyncController {
   constructor(private readonly svc: JoulesSyncService) {}
 
-  /** On-demand delta sync (I-09). Founder / Backoffice only. */
+  /** On-demand delta sync (I-09). Founder / Backoffice only. Accepts an
+   * optional list of Joules *status ids* to sweep (legacy key: `statuses`). */
   @Roles(...PHASE1_OPERATIONS_ROLLEN)
   @Post('joules')
-  run(@Body() body: { statuses?: string[] } | undefined, @Request() req: any) {
-    return this.svc.runSync({ akteur: req.user.sub, ausloeser: 'manual', statuses: body?.statuses });
+  run(
+    @Body() body: { statusIds?: Array<number | string>; statuses?: Array<number | string> } | undefined,
+    @Request() req: any,
+  ) {
+    return this.svc.runSync({
+      akteur: req.user.sub,
+      ausloeser: 'manual',
+      statusIds: body?.statusIds ?? body?.statuses,
+    });
   }
 
   /** Recent sync runs (I-09) — last-sync surface for the data-quality view. */

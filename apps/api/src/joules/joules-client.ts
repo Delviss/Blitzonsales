@@ -1,11 +1,12 @@
 import {
   JoulesCancellation,
   JoulesClient,
-  JoulesClientIds,
+  JoulesClientIdList,
   JoulesClientStatus,
-  JoulesCommissionSettings,
   JoulesConsumption,
+  JoulesOrganization,
   JoulesStatusOption,
+  JoulesUser,
 } from './joules-schemas';
 
 /** How the client authenticates (I-08). Either is accepted by the API. */
@@ -78,39 +79,53 @@ export class JoulesApiClient {
 
   // -- endpoints -------------------------------------------------------------
 
-  /** GET /clients/ids/{status} — the id list for a status (delta-sync driver). */
-  clientIds(status: string): Promise<JoulesClientIds> {
-    return this.get<JoulesClientIds>(`/clients/ids/${encodeURIComponent(status)}`);
+  /**
+   * GET /clients/ids/{status} — the id list for a status (delta-sync driver).
+   * `status` is the *Joules integer status id*, not the status name; the
+   * response is (nested) arrays of ClientIdSchema — see `flattenClientIds`.
+   */
+  clientIds(statusId: number | string): Promise<JoulesClientIdList> {
+    return this.get<JoulesClientIdList>(`/clients/ids/${encodeURIComponent(String(statusId))}`);
   }
 
-  /** GET /clients/{id} — the client / contract. */
+  /** GET /clients/{id} — the client / contract (nested ClientSchema). */
   client(id: string): Promise<JoulesClient> {
     return this.get<JoulesClient>(`/clients/${encodeURIComponent(id)}`);
   }
 
-  /** GET /clients/{id}/status — the current status. */
+  /** GET /clients/{id}/status — the current status (id + clear text + delivery dates). */
   clientStatus(id: string): Promise<JoulesClientStatus> {
     return this.get<JoulesClientStatus>(`/clients/${encodeURIComponent(id)}/status`);
   }
 
-  /** GET /consumption/{id} — consumption figures. */
-  consumption(id: string): Promise<JoulesConsumption> {
-    return this.get<JoulesConsumption>(`/consumption/${encodeURIComponent(id)}`);
+  /** GET /consumption/{id} — consumption entries (the API returns an array). */
+  consumption(id: string): Promise<JoulesConsumption[]> {
+    return this.get<JoulesConsumption[]>(`/consumption/${encodeURIComponent(id)}`);
   }
 
-  /** GET /cancellation/{id} — a reversal / cancellation, if any. */
-  cancellation(id: string): Promise<JoulesCancellation> {
-    return this.get<JoulesCancellation>(`/cancellation/${encodeURIComponent(id)}`);
+  /** GET /cancellation/{id} — cancellations for a client (the API returns an array). */
+  cancellation(id: string): Promise<JoulesCancellation[]> {
+    return this.get<JoulesCancellation[]>(`/cancellation/${encodeURIComponent(id)}`);
   }
 
-  /** GET /organizations/{id}/commissionsettings — partner compensation model. */
-  commissionSettings(orgId: string): Promise<JoulesCommissionSettings> {
-    return this.get<JoulesCommissionSettings>(`/organizations/${encodeURIComponent(orgId)}/commissionsettings`);
+  /** GET /user/{id} — resolve a rep's name from salesData.user_id (I-11 name matching). */
+  user(id: number | string): Promise<JoulesUser> {
+    return this.get<JoulesUser>(`/user/${encodeURIComponent(String(id))}`);
   }
 
-  /** Reference data — the status catalogue (stands in for OPTIONS /clients/statuses). */
+  /** GET /organizations/{id} — resolve an organisation's name from salesData.organization_id. */
+  organization(id: number | string): Promise<JoulesOrganization> {
+    return this.get<JoulesOrganization>(`/organizations/${encodeURIComponent(String(id))}`);
+  }
+
+  /** GET /organizations/{id}/commissionsettings — the org's commission settings. */
+  commissionSettings(orgId: number | string): Promise<Record<string, unknown>> {
+    return this.get<Record<string, unknown>>(`/organizations/${encodeURIComponent(String(orgId))}/commissionsettings`);
+  }
+
+  /** OPTIONS /clients/statuses — the status catalogue ({statusName} entries). */
   statuses(): Promise<JoulesStatusOption[]> {
-    return this.get<JoulesStatusOption[]>(`/clients/statuses`);
+    return this.request<JoulesStatusOption[]>('OPTIONS', `/clients/statuses`);
   }
 
   // -- transport -------------------------------------------------------------
@@ -126,12 +141,16 @@ export class JoulesApiClient {
     return {};
   }
 
+  private get<T>(path: string): Promise<T> {
+    return this.request<T>('GET', path);
+  }
+
   /**
-   * GET with retry + rate-limit handling. Retries on 429 (respecting
+   * Request with retry + rate-limit handling. Retries on 429 (respecting
    * `Retry-After`), on 5xx and on network/timeout errors with exponential
    * backoff; a non-429 4xx is a client error and is not retried.
    */
-  private async get<T>(path: string): Promise<T> {
+  private async request<T>(method: 'GET' | 'OPTIONS', path: string): Promise<T> {
     if (!this.isConfigured) {
       throw new JoulesApiError('Joules API ist nicht konfiguriert (kein Zugang hinterlegt).', null);
     }
@@ -143,7 +162,7 @@ export class JoulesApiClient {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
-        const res = await this.fetchImpl(url, { method: 'GET', headers, signal: controller.signal });
+        const res = await this.fetchImpl(url, { method, headers, signal: controller.signal });
         clearTimeout(timer);
 
         if (res.ok) {
