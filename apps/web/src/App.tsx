@@ -12,6 +12,7 @@ import ProvisionslaufDetailPage from './pages/ProvisionslaufDetailPage';
 import ImportPage from './pages/ImportPage';
 import DataQualityPage from './pages/DataQualityPage';
 import ForecastPage from './pages/ForecastPage';
+import FounderDashboardPage from './pages/FounderDashboardPage';
 import WiedervorlagenPage from './pages/WiedervorlagenPage';
 import StornoKontenPage from './pages/StornoKontenPage';
 import WarnungenPage from './pages/WarnungenPage';
@@ -34,6 +35,7 @@ export default function App() {
       <Route path="/" element={<RequireAuth><AppShell /></RequireAuth>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="founder-dashboard" element={<FounderDashboardPage />} />
         <Route path="verwaltung/organisationen" element={<OrganisationenPage />} />
         <Route path="verwaltung/verkaeufer" element={<VerkaeuferPage />} />
         <Route path="verwaltung/produkte" element={<ProduktePage />} />
